@@ -1,0 +1,52 @@
+name: radio_app
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Gestor de estado (como Spring DI)
+  flutter_riverpod: ^3.2.1
+
+  # Navegación declarativa
+  go_router: ^17.1.0
+
+  # Reproducción de audio streaming
+  just_audio: ^0.10.5
+
+  # HTTP client (como RestTemplate en Spring)
+  dio: ^5.4.3
+
+  # Imágenes con caché
+  cached_network_image: ^3.3.1
+
+  # Almacenamiento local (para guardar URL y favoritos)
+  shared_preferences: ^2.2.3
+
+  cupertino_icons: ^1.0.8
+
+  wakelock_plus: ^1.2.10   # ← añade esta línea
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.1
+
+# ⚠️ Este bloque va aquí, a nivel RAÍZ, fuera de flutter:
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/radio_avatar.jpg"
+  adaptive_icon_background: "#121212"
+  adaptive_icon_foreground: "assets/images/radio_avatar.jpg"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/

@@ -1,0 +1,28 @@
+# Carpetas generadas por Flutter/Dart (se regeneran con "flutter pub get")
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+
+# Dependencias de Android (se regeneran al compilar)
+android/.gradle/
+android/local.properties
+
+# Dependencias de iOS (se regeneran con "pod install")
+ios/Pods/
+ios/.symlinks/
+
+# Archivos de configuración local de IDEs
+.idea/
+.vscode/
+*.iml
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Archivos de claves y firma (¡nunca subir esto!)
+*.jks
+*.keystore
+key.properties
