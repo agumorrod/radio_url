@@ -24,28 +24,28 @@ class HomeScreen extends ConsumerWidget {
           child: Column(
             children: [
               // ─── Top Bar con botón de Ajustes ───────────────────────────────
-              // Align(
-              //   alignment: Alignment.topRight,
-              //   child: Padding(
-              //     padding: const EdgeInsets.only(top: 16, bottom: 8),
-              //     child: GestureDetector(
-              //       onTap: () => context.push('/settings'),
-              //       child: Container(
-              //         width: 44,
-              //         height: 44,
-              //         decoration: BoxDecoration(
-              //           color: AppColors.card,
-              //           borderRadius: BorderRadius.circular(12),
-              //         ),
-              //         child: const Icon(
-              //           Icons.settings_outlined,
-              //           color: AppColors.textSecondary,
-              //           size: 22,
-              //         ),
-              //       ),
-              //     ),
-              //   ),
-              // ),
+              Align(
+                alignment: Alignment.topRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 16, bottom: 8),
+                  child: GestureDetector(
+                    onTap: () => context.push('/settings'),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.settings_outlined,
+                        color: AppColors.textSecondary,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               const Spacer(),
 
               // ─── Avatar de la Radio ──────────────────────────────────────────
@@ -84,7 +84,7 @@ class HomeScreen extends ConsumerWidget {
               const SizedBox(height: 32),
 
               // ─── Nombre y dial ───────────────────────────────────────────────
-              const Text('Radio Trebujena', style: AppTextStyles.radioName),
+              const Text('Radio URL', style: AppTextStyles.radioName),
               const SizedBox(height: 6),
               const Text('107.7 FM', style: AppTextStyles.radioDial),
 

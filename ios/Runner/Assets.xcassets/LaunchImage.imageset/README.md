@@ -59,7 +59,7 @@ key.properties
 
 ### Paso 3: Subir el código desde la terminal
 
-Ejecuta estos comandos en la carpeta raíz de tu proyecto (`radio_app/`):
+Ejecuta estos comandos en la carpeta raíz de tu proyecto (`radio_url/`):
 
 ```bash
 # 1. Inicializar Git en el proyecto
@@ -85,7 +85,7 @@ git push -u origin main
 En GitHub deberías ver algo así (sin carpeta `build/` ni `Pods/`):
 
 ```
-radio_app/
+radio_url/
 ├── android/
 ├── ios/
 ├── lib/

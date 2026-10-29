@@ -1,4 +1,4 @@
-package es.app.radio_app
+package es.app.radio_url
 
 import android.content.Intent
 // import android.content.pm.PackageManager
@@ -11,7 +11,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
 
-    private val CHANNEL = "es.app.radio_app/foreground"
+    private val CHANNEL = "es.app.radio_url/foreground"
     // private val NOTIFICATION_PERMISSION_CODE = 100
 
     companion object {
@@ -51,7 +51,7 @@ class MainActivity : FlutterActivity() {
                     intent.action = AudioForegroundService.ACTION_START
                     intent.putExtra(
                         AudioForegroundService.EXTRA_TITLE,
-                        call.argument("title") ?: "Radio Trebujena"
+                        call.argument("title") ?: "Radio URL"
                     )
                     intent.putExtra(
                         AudioForegroundService.EXTRA_SUBTITLE,

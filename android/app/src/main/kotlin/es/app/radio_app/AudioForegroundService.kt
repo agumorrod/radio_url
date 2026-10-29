@@ -1,4 +1,4 @@
-package es.app.radio_app
+package es.app.radio_url
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -19,7 +19,7 @@ import androidx.core.app.NotificationCompat
 class AudioForegroundService : Service() {
 
     companion object {
-        const val CHANNEL_ID      = "radio_trebujena_channel"
+        const val CHANNEL_ID      = "radio_url_channel"
         const val NOTIFICATION_ID = 1
         const val ACTION_START    = "ACTION_START"
         const val ACTION_STOP     = "ACTION_STOP"
@@ -30,7 +30,7 @@ class AudioForegroundService : Service() {
     }
 
     private var isPlaying = true
-    private var title     = "Radio Trebujena"
+    private var title     = "Radio URL"
     private var subtitle  = "En directo"
 
     // Handler en el main thread para llamar a Flutter de forma segura
@@ -81,7 +81,7 @@ class AudioForegroundService : Service() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Radio Trebujena",
+            "Radio URL",
             NotificationManager.IMPORTANCE_LOW // IMPORTANCE_LOW = sin sonido
         ).apply {
             description = "Reproducción de audio en segundo plano"

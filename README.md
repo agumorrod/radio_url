@@ -7,7 +7,7 @@ App de radio streaming con podcasts para iOS y Android, construida con Flutter.
 En GitHub deberías ver algo así (sin carpeta `build/` ni `Pods/`):
 
 ```
-radio_app/
+radio_url/
 ├── android/
 ├── ios/
 ├── lib/
@@ -57,7 +57,7 @@ cd workspace
 ```
 Clonas el código del repositorio remoto a tu repositorio local
 ```bash
-git clone https://github.com/agumorrod/radio_app.git
+git clone https://github.com/agumorrod/radio_url.git
 ```
 
 ### Paso 2: Instalar dependencias

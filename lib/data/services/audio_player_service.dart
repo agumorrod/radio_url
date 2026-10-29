@@ -40,7 +40,7 @@ class AudioPlayerService {
     });
   }
 
-  static const _channel = MethodChannel('es.app.radio_app/foreground');
+  static const _channel = MethodChannel('es.app.radio_url/foreground');
 
   late final AudioPlayer _player;
   PlaybackType _currentType = PlaybackType.none;
@@ -56,7 +56,7 @@ class AudioPlayerService {
   Stream<Duration?> get durationStream => _player.durationStream;
 
   Future<void> _startForeground({
-    String title = 'Radio Trebujena',
+    String title = 'Radio URL',
     String subtitle = 'En directo',
   }) async {
     try {
@@ -95,7 +95,7 @@ class AudioPlayerService {
     _currentType = PlaybackType.radio;
     _currentPodcastId = null;
     try {
-      // await _startForeground(title: 'Radio Trebujena', subtitle: 'En directo');
+      // await _startForeground(title: 'Radio URL', subtitle: 'En directo');
       await _startForeground(title: 'En directo', subtitle: '');
       await _player.stop();
       await _player.setUrl(url);

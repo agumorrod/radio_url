@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:radio_app/data/models/podcast.dart';
-import 'package:radio_app/data/repositories/podcast_repository.dart';
-import 'package:radio_app/data/repositories/settings_repository.dart';
-import 'package:radio_app/data/services/audio_player_service.dart';
+import 'package:radio_url/data/models/podcast.dart';
+import 'package:radio_url/data/repositories/podcast_repository.dart';
+import 'package:radio_url/data/repositories/settings_repository.dart';
+import 'package:radio_url/data/services/audio_player_service.dart';
 
 // ─── Repositorios ──────────────────────────────────────────────────────────────
 
