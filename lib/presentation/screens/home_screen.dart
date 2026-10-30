@@ -53,10 +53,7 @@ class HomeScreen extends ConsumerWidget {
                 width: AppDimensions.avatarSizeLarge,
                 height: AppDimensions.avatarSizeLarge,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(
-                    AppDimensions.borderRadiusLarge,
-                  ),
-                  color: AppColors.card,
+                  shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.primary.withValues(green: 0.15),
@@ -65,12 +62,9 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(
-                    AppDimensions.borderRadiusLarge,
-                  ),
+                child: ClipOval(
                   child: Image.asset(
-                    'assets/images/radio_avatar.jpg',
+                    'assets/images/radio_avatar.png',
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => const Icon(
                       Icons.radio,
@@ -86,8 +80,8 @@ class HomeScreen extends ConsumerWidget {
               // ─── Nombre y dial ───────────────────────────────────────────────
               const Text('Radio URL', style: AppTextStyles.radioName),
               const SizedBox(height: 6),
-              const Text('107.7 FM', style: AppTextStyles.radioDial),
 
+              // const Text('107.7 FM', style: AppTextStyles.radioDial),
               const SizedBox(height: 36),
 
               // ─── Botón Play / Pausa ──────────────────────────────────────────

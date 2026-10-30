@@ -96,7 +96,7 @@ radio_url/
 │   └── presentation/
 ├── assets/
 │   └── images/
-│       └── radio_avatar.jpg
+│       └── radio_avatar.png
 ├── .gitignore
 ├── pubspec.yaml
 └── README.md
@@ -196,7 +196,7 @@ flutter build ios --release
 | Nombre de la radio | `lib/presentation/screens/home_screen.dart` |
 | Dial (FM 95.5) | `lib/presentation/screens/home_screen.dart` |
 | URL por defecto | `lib/domain/providers/app_providers.dart` → `_defaultUrl` |
-| Avatar de la radio | `assets/images/radio_avatar.jpg` |
+| Avatar de la radio | `assets/images/radio_avatar.png` |
 | Nombre de la app | `android/app/src/main/AndroidManifest.xml` → `android:label` |
 | Color acento | `lib/core/constants/app_constants.dart` → `AppColors.primary` |
 | Podcasts reales (iVoox) | `lib/domain/providers/app_providers.dart` → `PodcastsNotifier.build()` |

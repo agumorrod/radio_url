@@ -103,6 +103,7 @@ class PodcastsNotifier extends AsyncNotifier<List<Podcast>> {
     final podcasts = await ref
         .read(podcastRepositoryProvider)
         .fetchPodcasts('https://feeds.ivoox.com/feed_fg_f197737_filtro_1.xml');
+
     return podcasts
         .map((p) => p.copyWith(isFavorite: favoriteIds.contains(p.id)))
         .toList();
