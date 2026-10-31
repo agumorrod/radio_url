@@ -91,12 +91,12 @@ class AudioPlayerService {
 
   // ─── Radio ───────────────────────────────────────────────────────────────────
 
-  Future<void> playRadio(String url) async {
+  Future<void> playRadio(String url, {String title = 'Radio Trebujena'}) async {
     _currentType = PlaybackType.radio;
     _currentPodcastId = null;
     try {
       // await _startForeground(title: 'Radio URL', subtitle: 'En directo');
-      await _startForeground(title: 'En directo', subtitle: '');
+      await _startForeground(title: title, subtitle: 'En directo');
       await _player.stop();
       await _player.setUrl(url);
       await _player.play();

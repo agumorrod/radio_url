@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:radio_url/data/models/podcast.dart';
-import 'package:radio_url/data/repositories/podcast_repository.dart';
+import 'package:radio_url/data/models/station.dart';
 import 'package:radio_url/data/repositories/settings_repository.dart';
 import 'package:radio_url/data/services/audio_player_service.dart';
+import 'package:radio_url/data/services/stream_resolver.dart';
 
 // ─── Repositorios ──────────────────────────────────────────────────────────────
 
@@ -10,14 +10,15 @@ final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   return SettingsRepository();
 });
 
-final podcastRepositoryProvider = Provider<PodcastRepository>((ref) {
-  return PodcastRepository();
-});
-
 final audioServiceProvider = Provider<AudioPlayerService>((ref) {
   final service = AudioPlayerService();
   ref.onDispose(service.dispose);
   return service;
+});
+
+// Convierte listas .m3u / .pls en la URL real del streaming antes de reproducir
+final streamResolverProvider = Provider<StreamResolver>((ref) {
+  return StreamResolver();
 });
 
 // ─── Radio URL Provider ────────────────────────────────────────────────────────
@@ -36,14 +37,136 @@ class RadioUrlNotifier extends AsyncNotifier<String?> {
 
   Future<void> saveUrl(String url) async {
     final repo = ref.read(settingsRepositoryProvider);
-    await repo.saveRadioUrl(url);
-    state = AsyncData(url);
+    // Si la URL está vacía, usamos la URL por defecto
+    final urlToSave = url.trim().isEmpty ? _defaultUrl : url.trim();
+    await repo.saveRadioUrl(urlToSave);
+    state = AsyncData(urlToSave);
   }
 }
 
 final radioUrlProvider = AsyncNotifierProvider<RadioUrlNotifier, String?>(
   RadioUrlNotifier.new,
 );
+
+// ─── Stations Provider ─────────────────────────────────────────────────────────
+
+class StationsNotifier extends AsyncNotifier<List<Station>> {
+  @override
+  Future<List<Station>> build() async {
+    final repo = ref.read(settingsRepositoryProvider);
+
+    // Primera vez que se abre la app: creamos la emisora por defecto
+    if (!await repo.hasStations()) {
+      final seed = [
+        Station(
+          id: 'default_radio_trebujena',
+          name: 'Radio Trebujena',
+          url: RadioUrlNotifier._defaultUrl,
+          category: 'Local',
+        ),
+      ];
+      await repo.saveStations(seed);
+      return seed;
+    }
+    return await repo.getStations();
+  }
+
+  Future<void> add(Station station) async {
+    await _save([...(state.value ?? []), station]);
+  }
+
+  /// Añade varias emisoras de golpe (importación) saltándose las que ya existen
+  /// con la misma URL. Devuelve cuántas se han añadido de verdad.
+  Future<int> addMany(List<Station> newStations) async {
+    final current = state.value ?? [];
+    final knownUrls = current.map((s) => s.url).toSet();
+    final fresh = <Station>[];
+    for (final s in newStations) {
+      if (knownUrls.add(s.url)) {
+        fresh.add(s);
+      }
+    }
+    if (fresh.isNotEmpty) {
+      await _save([...current, ...fresh]);
+    }
+    return fresh.length;
+  }
+
+  Future<void> updateStation(Station station) async {
+    final current = state.value ?? [];
+    await _save(current.map((s) => s.id == station.id ? station : s).toList());
+  }
+
+  Future<void> remove(String stationId) async {
+    final current = state.value ?? [];
+    await _save(current.where((s) => s.id != stationId).toList());
+  }
+
+  Future<void> toggleFavorite(String stationId) async {
+    final current = state.value ?? [];
+    await _save(
+      current.map((s) {
+        if (s.id == stationId) return s.copyWith(isFavorite: !s.isFavorite);
+        return s;
+      }).toList(),
+    );
+  }
+
+  // Actualiza primero la UI y después persiste (así la pantalla responde al instante)
+  Future<void> _save(List<Station> stations) async {
+    state = AsyncData(stations);
+    await ref.read(settingsRepositoryProvider).saveStations(stations);
+  }
+}
+
+final stationsProvider = AsyncNotifierProvider<StationsNotifier, List<Station>>(
+  StationsNotifier.new,
+);
+
+// ─── Favorites Provider ───────────────────────────────────────────────────────
+
+// Los favoritos ya no se guardan aparte: son las emisoras con isFavorite = true.
+// Al derivarse de stationsProvider, Radios y Favoritos siempre están sincronizados.
+final favoritesProvider = Provider<AsyncValue<List<Station>>>((ref) {
+  return ref.watch(stationsProvider).whenData((stations) {
+    final favorites = stations.where((s) => s.isFavorite).toList();
+    favorites.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
+    return favorites;
+  });
+});
+
+// ─── Current Station Provider ─────────────────────────────────────────────────
+
+// Guarda solo el ID de la emisora cargada en Inicio (y lo persiste)
+class CurrentStationIdNotifier extends AsyncNotifier<String?> {
+  @override
+  Future<String?> build() async {
+    return await ref.read(settingsRepositoryProvider).getCurrentStationId();
+  }
+
+  Future<void> select(String stationId) async {
+    await ref.read(settingsRepositoryProvider).saveCurrentStationId(stationId);
+    state = AsyncData(stationId);
+  }
+}
+
+final currentStationIdProvider =
+    AsyncNotifierProvider<CurrentStationIdNotifier, String?>(
+      CurrentStationIdNotifier.new,
+    );
+
+// La emisora completa se deriva del ID + la lista: si editas la emisora actual,
+// Inicio se actualiza solo. Si no hay ninguna elegida (o se borró) devuelve null.
+final currentStationProvider = Provider<Station?>((ref) {
+  final id = ref.watch(currentStationIdProvider).value;
+  final stations = ref.watch(stationsProvider).value ?? [];
+  for (final station in stations) {
+    if (station.id == id) return station;
+  }
+  return null;
+});
 
 // ─── Radio Playback Provider ───────────────────────────────────────────────────
 
@@ -59,14 +182,32 @@ class RadioPlaybackNotifier extends Notifier<bool> {
     return false;
   }
 
-  Future<void> toggle(String url) async {
+  /// Play/pausa desde Inicio
+  Future<void> toggle(String url, {String title = 'Radio Trebujena'}) async {
     final audioService = ref.read(audioServiceProvider);
     if (state) {
       await audioService.pause();
     } else {
-      await ref.read(podcastPlaybackProvider.notifier).stop();
-      await audioService.playRadio(url);
+      await _play(url, title);
     }
+  }
+
+  /// Play/pausa desde la pestaña Radios o Favoritos.
+  /// Si pulsas play en OTRA emisora, la carga en Inicio y cambia el audio.
+  Future<void> toggleStation(Station station) async {
+    final currentId = ref.read(currentStationIdProvider).value;
+    if (state && currentId == station.id) {
+      await ref.read(audioServiceProvider).pause();
+    } else {
+      await ref.read(currentStationIdProvider.notifier).select(station.id);
+      await _play(station.url, station.name);
+    }
+  }
+
+  Future<void> _play(String url, String title) async {
+    // Si la URL es un .m3u / .pls se sustituye por la URL real del streaming
+    final streamUrl = await ref.read(streamResolverProvider).resolve(url);
+    await ref.read(audioServiceProvider).playRadio(streamUrl, title: title);
   }
 
   void setPlaying(bool playing) => state = playing;
@@ -92,189 +233,3 @@ class VolumeNotifier extends Notifier<double> {
 final volumeProvider = NotifierProvider<VolumeNotifier, double>(
   VolumeNotifier.new,
 );
-
-// ─── Podcasts Provider ────────────────────────────────────────────────────────
-
-class PodcastsNotifier extends AsyncNotifier<List<Podcast>> {
-  @override
-  Future<List<Podcast>> build() async {
-    final favorites = await ref.read(settingsRepositoryProvider).getFavorites();
-    final favoriteIds = favorites.map((f) => f.id).toSet();
-    final podcasts = await ref
-        .read(podcastRepositoryProvider)
-        .fetchPodcasts('https://feeds.ivoox.com/feed_fg_f197737_filtro_1.xml');
-
-    return podcasts
-        .map((p) => p.copyWith(isFavorite: favoriteIds.contains(p.id)))
-        .toList();
-  }
-
-  Future<void> toggleFavorite(String podcastId) async {
-    final repo = ref.read(settingsRepositoryProvider);
-    final currentPodcasts = state.value ?? [];
-
-    final updatedPodcasts = currentPodcasts.map((p) {
-      if (p.id == podcastId) return p.copyWith(isFavorite: !p.isFavorite);
-      return p;
-    }).toList();
-
-    state = AsyncData(updatedPodcasts);
-
-    final podcast = updatedPodcasts.firstWhere((p) => p.id == podcastId);
-    if (podcast.isFavorite) {
-      await repo.addFavorite(podcast);
-    } else {
-      await repo.removeFavorite(podcastId);
-    }
-
-    ref.invalidate(favoritesProvider);
-  }
-}
-
-final podcastsProvider = AsyncNotifierProvider<PodcastsNotifier, List<Podcast>>(
-  PodcastsNotifier.new,
-);
-
-// ─── Favorites Provider ───────────────────────────────────────────────────────
-
-class FavoritesNotifier extends AsyncNotifier<List<Podcast>> {
-  @override
-  Future<List<Podcast>> build() async {
-    return await ref.read(settingsRepositoryProvider).getFavorites();
-  }
-
-  Future<void> removeFavorite(String podcastId) async {
-    final repo = ref.read(settingsRepositoryProvider);
-    await repo.removeFavorite(podcastId);
-
-    final current = state.value ?? [];
-    state = AsyncData(current.where((p) => p.id != podcastId).toList());
-
-    ref.read(podcastsProvider.notifier).toggleFavorite(podcastId);
-  }
-}
-
-final favoritesProvider =
-    AsyncNotifierProvider<FavoritesNotifier, List<Podcast>>(
-      FavoritesNotifier.new,
-    );
-
-// ─── Podcast Playback State ───────────────────────────────────────────────────
-
-class PodcastPlaybackState {
-  final String? currentPodcastId;
-  final bool isPlaying;
-  final Duration position;
-  final Duration? duration;
-
-  const PodcastPlaybackState({
-    this.currentPodcastId,
-    this.isPlaying = false,
-    this.position = Duration.zero,
-    this.duration,
-  });
-
-  PodcastPlaybackState copyWith({
-    String? currentPodcastId,
-    bool? isPlaying,
-    Duration? position,
-    Duration? duration,
-  }) {
-    return PodcastPlaybackState(
-      currentPodcastId: currentPodcastId ?? this.currentPodcastId,
-      isPlaying: isPlaying ?? this.isPlaying,
-      position: position ?? this.position,
-      duration: duration ?? this.duration,
-    );
-  }
-}
-
-// ─── Podcast Playback Provider ────────────────────────────────────────────────
-
-class PodcastPlaybackNotifier extends Notifier<PodcastPlaybackState> {
-  @override
-  PodcastPlaybackState build() {
-    final audioService = ref.read(audioServiceProvider);
-
-    // ✅ FIX: Sincronizamos isPlaying con el estado REAL del player.
-    // Así cuando se reanuda la reproducción, el botón se actualiza
-    // automáticamente a pausa sin necesidad de gestión manual.
-    audioService.playerStateStream.listen((playerState) {
-      if (state.currentPodcastId == null) return;
-      // Solo actuamos si el audio activo es un podcast (no la radio)
-      if (audioService.currentType != PlaybackType.podcast) return;
-
-      final isActuallyPlaying = playerState.playing;
-      if (state.isPlaying != isActuallyPlaying) {
-        state = state.copyWith(isPlaying: isActuallyPlaying);
-      }
-    });
-
-    // Actualizamos posición en tiempo real para la barra de progreso
-    audioService.positionStream.listen((position) {
-      if (state.currentPodcastId != null) {
-        state = state.copyWith(position: position);
-      }
-    });
-
-    // Red de seguridad: si setUrl no devuelve duración, la pillamos aquí
-    audioService.durationStream.listen((duration) {
-      if (duration != null &&
-          state.currentPodcastId != null &&
-          state.duration == null) {
-        state = state.copyWith(duration: duration);
-      }
-    });
-
-    return const PodcastPlaybackState();
-  }
-
-  Future<void> togglePodcast(Podcast podcast) async {
-    final audioService = ref.read(audioServiceProvider);
-
-    if (state.currentPodcastId == podcast.id && state.isPlaying) {
-      // Pausar — el playerStateStream actualizará isPlaying a false
-      await audioService.pause();
-    } else if (state.currentPodcastId == podcast.id && !state.isPlaying) {
-      // Reanudar — el playerStateStream actualizará isPlaying a true
-      await audioService.resume();
-    } else {
-      // Nuevo podcast: mostramos la barra inmediatamente
-      state = PodcastPlaybackState(
-        currentPodcastId: podcast.id,
-        isPlaying: true,
-      );
-
-      ref.read(radioPlaybackProvider.notifier).setPlaying(false);
-
-      String prefix = 'Podcast: ';
-
-      final duration = await audioService.playPodcast(
-        podcast.streamUrl,
-        podcast.id,
-        title: prefix + podcast.title,
-      );
-
-      state = state.copyWith(duration: duration);
-    }
-  }
-
-  Future<void> seek(Duration position) async {
-    final audioService = ref.read(audioServiceProvider);
-    await audioService.seek(position);
-    state = state.copyWith(position: position);
-  }
-
-  Future<void> stop() async {
-    final audioService = ref.read(audioServiceProvider);
-    if (audioService.currentType == PlaybackType.podcast) {
-      await audioService.stop();
-      state = const PodcastPlaybackState();
-    }
-  }
-}
-
-final podcastPlaybackProvider =
-    NotifierProvider<PodcastPlaybackNotifier, PodcastPlaybackState>(
-      PodcastPlaybackNotifier.new,
-    );

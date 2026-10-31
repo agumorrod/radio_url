@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_constants.dart';
 import '../../domain/providers/app_providers.dart';
-import '../widgets/podcast_card.dart';
+import '../widgets/station_card.dart';
 
 class FavoritesScreen extends ConsumerWidget {
   const FavoritesScreen({super.key});
@@ -25,7 +25,7 @@ class FavoritesScreen extends ConsumerWidget {
                 child: Text('Favoritos', style: AppTextStyles.title),
               ),
               const Text(
-                'Tus podcasts guardados',
+                'Tus emisoras guardadas',
                 style: AppTextStyles.subtitle,
               ),
 
@@ -59,7 +59,7 @@ class FavoritesScreen extends ConsumerWidget {
                             ),
                             SizedBox(height: 6),
                             Text(
-                              'Marca el corazón en un podcast\npara guardarlo aquí',
+                              'Marca el corazón en una emisora\npara guardarla aquí',
                               style: TextStyle(
                                 color: AppColors.textHint,
                                 fontSize: 13,
@@ -75,15 +75,15 @@ class FavoritesScreen extends ConsumerWidget {
                       physics: const BouncingScrollPhysics(),
                       itemCount: favorites.length,
                       itemBuilder: (context, index) {
-                        final podcast = favorites[index];
-                        return PodcastCard(
+                        final station = favorites[index];
+                        return StationCard(
                           // En favoritos, el corazón siempre está marcado
-                          podcast: podcast.copyWith(isFavorite: true),
+                          station: station.copyWith(isFavorite: true),
                           onFavoriteToggle: () {
                             // En favoritos, al pulsar el corazón se elimina
                             ref
-                                .read(favoritesProvider.notifier)
-                                .removeFavorite(podcast.id);
+                                .read(stationsProvider.notifier)
+                                .toggleFavorite(station.id);
                           },
                         );
                       },
