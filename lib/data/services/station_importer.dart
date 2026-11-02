@@ -1,5 +1,22 @@
 import '../models/station.dart';
 
+/// Una línea del listado que NO se pudo importar, y por qué
+class ImportIssue {
+  final int lineNumber;
+  final String line;
+  final String reason;
+
+  const ImportIssue(this.lineNumber, this.line, this.reason);
+}
+
+/// Resultado de una importación: lo que se pudo leer y lo que se rechazó
+class ImportResult {
+  final List<Station> stations;
+  final List<ImportIssue> issues;
+
+  const ImportResult(this.stations, this.issues);
+}
+
 /// Convierte texto en emisoras (importar) y emisoras en texto (exportar).
 /// Evita tener que teclear 200 emisoras una a una.
 class StationImporter {
@@ -8,14 +25,17 @@ class StationImporter {
   ///  2) M3U extendido:  #EXTINF:-1 group-title="Música",Nombre
   ///                     http://servidor/stream
   ///  3) Solo la URL (el nombre será el dominio)
-  static List<Station> parse(String text) {
+  static ImportResult parse(String text) {
     final stations = <Station>[];
+    final issues = <ImportIssue>[];
     String? pendingName;
     String? pendingCategory;
     var salt = 0;
 
-    for (final raw in text.split(RegExp(r'\r?\n'))) {
-      final line = raw.trim();
+    final lines = text.split(RegExp(r'\r?\n'));
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i].trim();
+      final lineNumber = i + 1;
       if (line.isEmpty || line.startsWith('#EXTM3U')) continue;
 
       // Cabecera M3U: guardamos nombre y categoría para la URL de la línea siguiente
@@ -48,7 +68,19 @@ class StationImporter {
       pendingName = null;
       pendingCategory = null;
 
-      if (!url.startsWith('http://') && !url.startsWith('https://')) continue;
+      // Línea rechazada: se anota el motivo para el registro de errores
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        issues.add(
+          ImportIssue(
+            lineNumber,
+            line,
+            url.isEmpty
+                ? 'falta la URL'
+                : 'la URL debe empezar por http:// o https://',
+          ),
+        );
+        continue;
+      }
       if (name.isEmpty) name = Uri.tryParse(url)?.host ?? url;
 
       stations.add(
@@ -60,7 +92,7 @@ class StationImporter {
         ),
       );
     }
-    return stations;
+    return ImportResult(stations, issues);
   }
 
   /// Genera el formato 1 (Nombre;URL;Categoría), compatible con parse()

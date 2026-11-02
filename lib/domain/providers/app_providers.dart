@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:radio_url/data/models/station.dart';
-import 'package:radio_url/data/repositories/settings_repository.dart';
-import 'package:radio_url/data/services/audio_player_service.dart';
-import 'package:radio_url/data/services/stream_resolver.dart';
+import '../../core/utils/error_utils.dart';
+import '../../data/models/station.dart';
+import '../../data/repositories/settings_repository.dart';
+import '../../data/services/audio_player_service.dart';
+import '../../data/services/station_checker.dart';
+import '../../data/services/stream_resolver.dart';
 
 // ─── Repositorios ──────────────────────────────────────────────────────────────
 
@@ -19,6 +22,11 @@ final audioServiceProvider = Provider<AudioPlayerService>((ref) {
 // Convierte listas .m3u / .pls en la URL real del streaming antes de reproducir
 final streamResolverProvider = Provider<StreamResolver>((ref) {
   return StreamResolver();
+});
+
+// Comprueba en segundo plano si las emisoras responden
+final stationCheckerProvider = Provider<StationChecker>((ref) {
+  return StationChecker(ref.read(streamResolverProvider));
 });
 
 // ─── Radio URL Provider ────────────────────────────────────────────────────────
@@ -48,6 +56,92 @@ final radioUrlProvider = AsyncNotifierProvider<RadioUrlNotifier, String?>(
   RadioUrlNotifier.new,
 );
 
+// ─── Error Log Provider ────────────────────────────────────────────────────────
+
+enum LogLevel { error, success }
+
+class LogEntry {
+  final int id;
+  final DateTime time;
+  final LogLevel level;
+  final String message;
+
+  const LogEntry({
+    required this.id,
+    required this.time,
+    required this.level,
+    required this.message,
+  });
+}
+
+/// Registro de errores SOLO EN MEMORIA: no se guarda en disco, así que se
+/// vacía solo cada vez que se cierra la app.
+class ErrorLogNotifier extends Notifier<List<LogEntry>> {
+  static const int _maxEntries = 300; // tope para que nunca crezca sin límite
+  int _nextId = 0;
+
+  @override
+  List<LogEntry> build() => [];
+
+  void addError(String message) => _add(LogLevel.error, message);
+
+  // Solo se usa para informar de las emisoras añadidas en una carga
+  void addSuccess(String message) => _add(LogLevel.success, message);
+
+  void _add(LogLevel level, String message) {
+    // Si el mismo mensaje ya está, lo subimos arriba en vez de duplicarlo
+    // (evita llenar el registro si se pulsa play varias veces en una emisora caída)
+    final rest = state
+        .where((e) => !(e.level == level && e.message == message))
+        .toList();
+    final entry = LogEntry(
+      id: _nextId++,
+      time: DateTime.now(),
+      level: level,
+      message: message,
+    );
+    state = [
+      entry,
+      ...rest,
+    ].take(_maxEntries).toList(); // la más reciente primero
+  }
+
+  void remove(int id) {
+    state = state.where((e) => e.id != id).toList();
+  }
+
+  void clear() {
+    state = [];
+  }
+}
+
+final errorLogProvider = NotifierProvider<ErrorLogNotifier, List<LogEntry>>(
+  ErrorLogNotifier.new,
+);
+
+// ─── Unavailable Stations Provider ─────────────────────────────────────────────
+
+/// IDs de las emisoras que NO se han podido reproducir o que no respondieron
+/// en la comprobación de arranque. Solo en memoria. La tarjeta las pinta
+/// "deshabilitadas" (pero con sus botones activos).
+class UnavailableStationsNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => {};
+
+  void markUnavailable(String stationId) {
+    if (!state.contains(stationId)) state = {...state, stationId};
+  }
+
+  void markAvailable(String stationId) {
+    if (state.contains(stationId)) state = {...state}..remove(stationId);
+  }
+}
+
+final unavailableStationsProvider =
+    NotifierProvider<UnavailableStationsNotifier, Set<String>>(
+      UnavailableStationsNotifier.new,
+    );
+
 // ─── Stations Provider ─────────────────────────────────────────────────────────
 
 class StationsNotifier extends AsyncNotifier<List<Station>> {
@@ -76,12 +170,13 @@ class StationsNotifier extends AsyncNotifier<List<Station>> {
   }
 
   /// Añade varias emisoras de golpe (importación) saltándose las que ya existen
-  /// con la misma URL. Devuelve cuántas se han añadido de verdad.
-  Future<int> addMany(List<Station> newStations) async {
+  /// con la misma URL. Devuelve las que se han añadido de verdad.
+  Future<List<Station>> addMany(List<Station> newStations) async {
     final current = state.value ?? [];
     final knownUrls = current.map((s) => s.url).toSet();
     final fresh = <Station>[];
     for (final s in newStations) {
+      // add() devuelve false si la URL ya estaba
       if (knownUrls.add(s.url)) {
         fresh.add(s);
       }
@@ -89,9 +184,10 @@ class StationsNotifier extends AsyncNotifier<List<Station>> {
     if (fresh.isNotEmpty) {
       await _save([...current, ...fresh]);
     }
-    return fresh.length;
+    return fresh;
   }
 
+  // OJO: no se puede llamar 'update' porque AsyncNotifier ya tiene un método con ese nombre
   Future<void> updateStation(Station station) async {
     final current = state.value ?? [];
     await _save(current.map((s) => s.id == station.id ? station : s).toList());
@@ -121,6 +217,59 @@ class StationsNotifier extends AsyncNotifier<List<Station>> {
 
 final stationsProvider = AsyncNotifierProvider<StationsNotifier, List<Station>>(
   StationsNotifier.new,
+);
+
+// ─── Station Health Provider ───────────────────────────────────────────────────
+
+/// Comprueba en segundo plano, una vez por ejecución, qué emisoras responden.
+/// El estado es true mientras la comprobación está en marcha.
+class StationHealthNotifier extends Notifier<bool> {
+  bool _started = false;
+
+  @override
+  bool build() => false;
+
+  Future<void> startBackgroundCheck() async {
+    // En web no es fiable (CORS) y solo se hace una vez por ejecución
+    if (_started || kIsWeb) return;
+    _started = true;
+
+    // Unos segundos de cortesía para no competir con el arranque de la app
+    await Future<void>.delayed(const Duration(seconds: 4));
+
+    final stations = await ref.read(stationsProvider.future);
+    if (stations.isEmpty) return;
+
+    final checker = ref.read(stationCheckerProvider);
+    final log = ref.read(errorLogProvider.notifier);
+    final unavailable = ref.read(unavailableStationsProvider.notifier);
+
+    // Sin internet todas fallarían: lo anotamos una sola vez y no marcamos nada
+    if (!await checker.hasInternet()) {
+      log.addError(
+        'Sin conexión a internet: no se pudieron comprobar las emisoras al arrancar',
+      );
+      return;
+    }
+
+    state = true;
+    await checker.checkAll(
+      stations,
+      onResult: (station, failure) {
+        if (failure == null) {
+          unavailable.markAvailable(station.id);
+        } else {
+          unavailable.markUnavailable(station.id);
+          log.addError('Emisora no disponible: "${station.name}" ($failure)');
+        }
+      },
+    );
+    state = false;
+  }
+}
+
+final stationHealthProvider = NotifierProvider<StationHealthNotifier, bool>(
+  StationHealthNotifier.new,
 );
 
 // ─── Favorites Provider ───────────────────────────────────────────────────────
@@ -183,16 +332,20 @@ class RadioPlaybackNotifier extends Notifier<bool> {
   }
 
   /// Play/pausa desde Inicio
-  Future<void> toggle(String url, {String title = 'Radio Trebujena'}) async {
+  Future<void> toggle(
+    String url, {
+    String title = 'Radio Trebujena',
+    String? stationId,
+  }) async {
     final audioService = ref.read(audioServiceProvider);
     if (state) {
       await audioService.pause();
     } else {
-      await _play(url, title);
+      await _playTracked(url, title, stationId);
     }
   }
 
-  /// Play/pausa desde la pestaña Radios o Favoritos.
+  /// Play/pausa desde la pestaña Emisoras o Favoritos.
   /// Si pulsas play en OTRA emisora, la carga en Inicio y cambia el audio.
   Future<void> toggleStation(Station station) async {
     final currentId = ref.read(currentStationIdProvider).value;
@@ -200,7 +353,31 @@ class RadioPlaybackNotifier extends Notifier<bool> {
       await ref.read(audioServiceProvider).pause();
     } else {
       await ref.read(currentStationIdProvider.notifier).select(station.id);
-      await _play(station.url, station.name);
+      await _playTracked(station.url, station.name, station.id);
+    }
+  }
+
+  /// Reproduce y deja constancia del resultado:
+  ///  - Si falla: la emisora pasa a "no disponible" y se anota en el registro.
+  ///  - Si funciona: vuelve a estar disponible (aunque estuviera marcada como caída).
+  /// El error se relanza para que la pantalla muestre el aviso inferior.
+  Future<void> _playTracked(String url, String title, String? stationId) async {
+    final unavailable = ref.read(unavailableStationsProvider.notifier);
+    try {
+      await _play(url, title);
+      if (stationId != null) {
+        unavailable.markAvailable(stationId);
+      }
+    } catch (e) {
+      if (stationId != null) {
+        unavailable.markUnavailable(stationId);
+      }
+      ref
+          .read(errorLogProvider.notifier)
+          .addError(
+            'No se pudo reproducir "$title": ${describePlaybackError(e)}',
+          );
+      rethrow;
     }
   }
 

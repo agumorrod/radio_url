@@ -41,6 +41,14 @@ class _RadiosScreenState extends ConsumerState<RadiosScreen> {
   String _searchQuery = '';
   bool _sortAscending = true; // true = A-Z, false = Z-A
 
+  // ─── Botón "+" movible ──────────────────────────────────────────────────────
+  // Su posición es una fracción (0 a 1) del espacio libre del listado:
+  // (0,0) = esquina superior izquierda, (1,1) = esquina inferior derecha.
+  static const double _addButtonSize = 56;
+  static const double _addButtonMargin = 8;
+  double _addX = 1;
+  double _addY = 1;
+
   // ─── Control del foco del buscador ──────────────────────────────────────────
   // Cuando se cierra un diálogo o un menú, Flutter devuelve el foco al primer
   // campo de texto de la pantalla (el buscador) y aparece el teclado. Para
@@ -73,6 +81,26 @@ class _RadiosScreenState extends ConsumerState<RadiosScreen> {
     } finally {
       _unlockSearchFocus();
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Posición guardada del botón "+" (si el usuario lo movió alguna vez)
+    ref.read(settingsRepositoryProvider).getAddButtonPosition().then((pos) {
+      if (pos != null && mounted) {
+        setState(() {
+          _addX = pos[0];
+          _addY = pos[1];
+        });
+      }
+    });
+
+    // Comprobación de emisoras en segundo plano, una vez al arrancar la app
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(stationHealthProvider.notifier).startBackgroundCheck();
+    });
   }
 
   @override
@@ -125,6 +153,17 @@ class _RadiosScreenState extends ConsumerState<RadiosScreen> {
     );
   }
 
+  // ─── Registro de errores ────────────────────────────────────────────────────
+
+  Future<void> _showErrorLog() async {
+    await _withoutSearchFocus(
+      () => showDialog<void>(
+        context: context,
+        builder: (_) => const _ErrorLogDialog(),
+      ),
+    );
+  }
+
   // ─── Pulsación larga: ventana "¿Qué hacer con...?" ──────────────────────────
 
   Future<void> _showStationActions(Station station, Rect cardRect) async {
@@ -172,6 +211,9 @@ class _RadiosScreenState extends ConsumerState<RadiosScreen> {
       await notifier.add(result);
     } else {
       await notifier.updateStation(result);
+      // Si se ha corregido la URL, se vuelve a considerar disponible hasta
+      // que se demuestre lo contrario al reproducirla
+      ref.read(unavailableStationsProvider.notifier).markAvailable(result.id);
     }
   }
 
@@ -215,21 +257,72 @@ class _RadiosScreenState extends ConsumerState<RadiosScreen> {
     );
     if (text == null || text.trim().isEmpty || !mounted) return;
 
-    final parsed = StationImporter.parse(text);
-    final added = await ref.read(stationsProvider.notifier).addMany(parsed);
-    if (!mounted) return;
+    final result = StationImporter.parse(text);
+    final log = ref.read(errorLogProvider.notifier);
 
-    if (parsed.isEmpty) {
-      _showMessage(
-        'No se encontró ninguna emisora válida',
-        color: Colors.redAccent,
-      );
-    } else {
-      _showMessage(
-        '$added emisoras añadidas '
-        '(${parsed.length - added} repetidas omitidas)',
+    // Líneas rechazadas por formato incorrecto → registro de errores
+    // (las 15 primeras con detalle, el resto resumidas en una sola entrada)
+    const maxDetailed = 15;
+    for (final issue in result.issues.take(maxDetailed)) {
+      log.addError(
+        'Línea ${issue.lineNumber} no añadida: ${issue.reason} '
+        '("${_shorten(issue.line)}")',
       );
     }
+    if (result.issues.length > maxDetailed) {
+      log.addError(
+        'Otras ${result.issues.length - maxDetailed} líneas no se añadieron '
+        'por tener un formato incorrecto',
+      );
+    }
+
+    final added = await ref
+        .read(stationsProvider.notifier)
+        .addMany(result.stations);
+    final duplicates = result.stations.length - added.length;
+
+    // Único mensaje de éxito del registro: las emisoras añadidas en la carga
+    if (added.isNotEmpty) {
+      log.addSuccess(_describeLoad(added, duplicates));
+    }
+    if (!mounted) return;
+
+    if (added.isEmpty) {
+      if (result.issues.isNotEmpty) {
+        _showMessage(
+          'No se añadió ninguna emisora (mira el registro de errores)',
+          color: Colors.redAccent,
+        );
+      } else if (duplicates > 0) {
+        _showMessage('Todas las emisoras ya estaban en la lista');
+      } else {
+        _showMessage('No se encontró ninguna emisora', color: Colors.redAccent);
+      }
+    } else {
+      final extras = <String>[];
+      if (duplicates > 0) {
+        extras.add('$duplicates repetidas');
+      }
+      if (result.issues.isNotEmpty) {
+        extras.add('${result.issues.length} con errores');
+      }
+      _showMessage(
+        '${added.length} emisoras añadidas'
+        '${extras.isEmpty ? '' : ' (${extras.join(', ')})'}',
+      );
+    }
+  }
+
+  String _shorten(String text) =>
+      text.length > 60 ? '${text.substring(0, 57)}...' : text;
+
+  /// "Carga completada: 37 emisoras añadidas (Radio A, Radio B, Radio C y 34 más)"
+  String _describeLoad(List<Station> added, int duplicates) {
+    final names = added.take(3).map((s) => s.name).join(', ');
+    final rest = added.length - 3;
+    final namesText = rest > 0 ? '$names y $rest más' : names;
+    final dupText = duplicates > 0 ? '. $duplicates repetidas omitidas' : '';
+    return 'Carga completada: ${added.length} emisoras añadidas ($namesText)$dupText';
   }
 
   Future<void> _exportStations() async {
@@ -246,16 +339,16 @@ class _RadiosScreenState extends ConsumerState<RadiosScreen> {
   @override
   Widget build(BuildContext context) {
     final stationsAsync = ref.watch(stationsProvider);
+    final isChecking = ref.watch(stationHealthProvider);
     final all = stationsAsync.value ?? [];
     final filtered = _applyFilters(all);
 
+    final countText = _searchQuery.isEmpty
+        ? '${all.length} emisoras'
+        : '${filtered.length} de ${all.length} emisoras';
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.primary,
-        onPressed: () => _addOrEditStation(),
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(
@@ -308,12 +401,21 @@ class _RadiosScreenState extends ConsumerState<RadiosScreen> {
                   ],
                 ),
               ),
-              const Text(
-                'Tus emisoras de streaming',
-                style: AppTextStyles.subtitle,
+
+              // Subtítulo a la izquierda y botón del registro de errores a la derecha
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Tus emisoras de streaming',
+                      style: AppTextStyles.subtitle,
+                    ),
+                  ),
+                  _ErrorLogButton(onPressed: _showErrorLog),
+                ],
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               // ─── Buscador ────────────────────────────────────────────────────
               TextField(
@@ -376,9 +478,8 @@ class _RadiosScreenState extends ConsumerState<RadiosScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      _searchQuery.isEmpty
-                          ? '${all.length} emisoras'
-                          : '${filtered.length} de ${all.length} emisoras',
+                      // Mientras corre la comprobación de arranque se avisa aquí
+                      isChecking ? '$countText · comprobando…' : countText,
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -426,84 +527,59 @@ class _RadiosScreenState extends ConsumerState<RadiosScreen> {
 
               const SizedBox(height: 10),
 
-              // ─── Lista de Emisoras ───────────────────────────────────────────
+              // ─── Lista de Emisoras + botón "+" movible ───────────────────────
               Expanded(
-                child: stationsAsync.when(
-                  loading: () => const Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
-                  ),
-                  error: (error, _) => Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Recorrido máximo del botón dentro del espacio del listado
+                    final maxX = math.max(
+                      0.0,
+                      constraints.maxWidth -
+                          _addButtonSize -
+                          2 * _addButtonMargin,
+                    );
+                    final maxY = math.max(
+                      0.0,
+                      constraints.maxHeight -
+                          _addButtonSize -
+                          2 * _addButtonMargin,
+                    );
+
+                    return Stack(
                       children: [
-                        const Icon(
-                          Icons.error_outline,
-                          color: AppColors.textHint,
-                          size: 48,
+                        Positioned.fill(
+                          child: _buildStationList(
+                            stationsAsync,
+                            all,
+                            filtered,
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Error al cargar las emisoras\n$error',
-                          style: AppTextStyles.subtitle,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        TextButton(
-                          onPressed: () => ref.invalidate(stationsProvider),
-                          child: const Text(
-                            'Reintentar',
-                            style: TextStyle(color: AppColors.primary),
+                        Positioned(
+                          left: _addButtonMargin + _addX * maxX,
+                          top: _addButtonMargin + _addY * maxY,
+                          child: _DraggableAddButton(
+                            size: _addButtonSize,
+                            onTap: () => _addOrEditStation(),
+                            // Al arrastrar, movemos la fracción sin salirnos del listado
+                            onDrag: (delta) => setState(() {
+                              if (maxX > 0) {
+                                _addX = ((_addX * maxX + delta.dx) / maxX)
+                                    .clamp(0.0, 1.0)
+                                    .toDouble();
+                              }
+                              if (maxY > 0) {
+                                _addY = ((_addY * maxY + delta.dy) / maxY)
+                                    .clamp(0.0, 1.0)
+                                    .toDouble();
+                              }
+                            }),
+                            // Al soltar, se guarda para la próxima vez
+                            onDragEnd: () => ref
+                                .read(settingsRepositoryProvider)
+                                .saveAddButtonPosition(_addX, _addY),
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  data: (_) {
-                    if (filtered.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              all.isEmpty ? Icons.radio : Icons.search_off,
-                              color: AppColors.textHint,
-                              size: 48,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              all.isEmpty
-                                  ? 'Aún no hay emisoras\nPulsa + para añadir una o importa un listado'
-                                  : 'No hay resultados para\n"$_searchQuery"',
-                              style: AppTextStyles.subtitle,
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return ListView.builder(
-                      physics: const BouncingScrollPhysics(),
-                      // Al arrastrar la lista también se cierra el teclado
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      // Espacio extra para que el botón + no tape la última emisora
-                      padding: const EdgeInsets.only(bottom: 80),
-                      itemCount: filtered.length,
-                      itemBuilder: (context, index) {
-                        final station = filtered[index];
-                        return StationCard(
-                          station: station,
-                          onFavoriteToggle: () {
-                            ref
-                                .read(stationsProvider.notifier)
-                                .toggleFavorite(station.id);
-                          },
-                          // Pulsación larga: ventana con Editar y Eliminar
-                          onLongPress: (cardRect) =>
-                              _showStationActions(station, cardRect),
-                        );
-                      },
                     );
                   },
                 ),
@@ -511,6 +587,294 @@ class _RadiosScreenState extends ConsumerState<RadiosScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStationList(
+    AsyncValue<List<Station>> stationsAsync,
+    List<Station> all,
+    List<Station> filtered,
+  ) {
+    return stationsAsync.when(
+      loading: () => const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      ),
+      error: (error, _) => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: AppColors.textHint,
+              size: 48,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Error al cargar las emisoras\n$error',
+              style: AppTextStyles.subtitle,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => ref.invalidate(stationsProvider),
+              child: const Text(
+                'Reintentar',
+                style: TextStyle(color: AppColors.primary),
+              ),
+            ),
+          ],
+        ),
+      ),
+      data: (_) {
+        if (filtered.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  all.isEmpty ? Icons.radio : Icons.search_off,
+                  color: AppColors.textHint,
+                  size: 48,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  all.isEmpty
+                      ? 'Aún no hay emisoras\nPulsa + para añadir una o importa un listado'
+                      : 'No hay resultados para\n"$_searchQuery"',
+                  style: AppTextStyles.subtitle,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          physics: const BouncingScrollPhysics(),
+          // Al arrastrar la lista también se cierra el teclado
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.only(bottom: 24),
+          itemCount: filtered.length,
+          itemBuilder: (context, index) {
+            final station = filtered[index];
+            return StationCard(
+              station: station,
+              onFavoriteToggle: () {
+                ref.read(stationsProvider.notifier).toggleFavorite(station.id);
+              },
+              // Pulsación larga: ventana con Editar y Eliminar
+              onLongPress: (cardRect) => _showStationActions(station, cardRect),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// ─── Botón "+" arrastrable ────────────────────────────────────────────────────
+
+/// Un toque abre el alta de emisora; arrastrarlo lo cambia de sitio
+class _DraggableAddButton extends StatelessWidget {
+  final double size;
+  final VoidCallback onTap;
+  final void Function(Offset delta) onDrag;
+  final VoidCallback onDragEnd;
+
+  const _DraggableAddButton({
+    required this.size,
+    required this.onTap,
+    required this.onDrag,
+    required this.onDragEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      onPanStart: (_) => HapticFeedback.selectionClick(),
+      onPanUpdate: (details) => onDrag(details.delta),
+      onPanEnd: (_) => onDragEnd(),
+      child: Material(
+        color: AppColors.primary,
+        elevation: 6,
+        shape: const CircleBorder(),
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Registro de errores: botón y ventana ─────────────────────────────────────
+
+/// Icono que cambia de color: rojo si hay errores en el registro, gris si no
+class _ErrorLogButton extends ConsumerWidget {
+  final VoidCallback onPressed;
+
+  const _ErrorLogButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasErrors = ref.watch(
+      errorLogProvider.select(
+        (entries) => entries.any((e) => e.level == LogLevel.error),
+      ),
+    );
+
+    return IconButton(
+      tooltip: 'Registro de errores',
+      onPressed: onPressed,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      icon: Icon(
+        Icons.error_outline,
+        size: 22,
+        color: hasErrors ? Colors.redAccent : AppColors.textHint,
+      ),
+    );
+  }
+}
+
+class _ErrorLogDialog extends ConsumerWidget {
+  const _ErrorLogDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // watch: la lista se actualiza sola al quitar entradas o llegar nuevas
+    final entries = ref.watch(errorLogProvider);
+    final notifier = ref.read(errorLogProvider.notifier);
+    final hasErrors = entries.any((e) => e.level == LogLevel.error);
+
+    return AppDialog(
+      title: 'Registro de errores',
+      titleColor: hasErrors ? Colors.redAccent : AppColors.primary,
+      content: entries.isEmpty
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check_circle_outline,
+                    color: AppColors.textHint,
+                    size: 36,
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'No hay errores registrados',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          // Altura máxima: a partir de ahí la lista se desliza en vertical
+          : ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 320),
+              child: ListView.separated(
+                shrinkWrap: true,
+                primary: false,
+                physics: const ClampingScrollPhysics(),
+                itemCount: entries.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final entry = entries[index];
+                  return _LogEntryTile(
+                    entry: entry,
+                    onRemove: () => notifier.remove(entry.id),
+                  );
+                },
+              ),
+            ),
+      actions: [
+        AppDialogButton.cancel(
+          label: 'Cerrar',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        // Deshabilitado cuando no hay nada que limpiar
+        AppDialogButton(
+          label: 'Limpiar registro',
+          color: Colors.redAccent,
+          onPressed: entries.isEmpty ? null : notifier.clear,
+        ),
+      ],
+    );
+  }
+}
+
+/// Una entrada del registro, con su botón X para quitarla individualmente
+class _LogEntryTile extends StatelessWidget {
+  final LogEntry entry;
+  final VoidCallback onRemove;
+
+  const _LogEntryTile({required this.entry, required this.onRemove});
+
+  static String _two(int value) => value.toString().padLeft(2, '0');
+
+  @override
+  Widget build(BuildContext context) {
+    final isError = entry.level == LogLevel.error;
+    final t = entry.time;
+    final timeLabel = '${_two(t.hour)}:${_two(t.minute)}:${_two(t.second)}';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 2, 8),
+      decoration: BoxDecoration(
+        color: AppColors.cardLight,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(
+              isError ? Icons.error_outline : Icons.check_circle_outline,
+              size: 18,
+              color: isError ? Colors.redAccent : AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.message,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  timeLabel,
+                  style: const TextStyle(
+                    color: AppColors.textHint,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Quitar',
+            onPressed: onRemove,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            icon: const Icon(Icons.close, size: 16, color: AppColors.textHint),
+          ),
+        ],
       ),
     );
   }
@@ -840,10 +1204,27 @@ class _StationFormDialogState extends State<_StationFormDialog> {
             style: const TextStyle(color: AppColors.textPrimary),
             keyboardType: TextInputType.url,
             autocorrect: false,
-            decoration: _inputDecoration(
-              'URL del streaming',
-              hint: 'https://servidor.com/stream.mp3',
-            ),
+            decoration:
+                _inputDecoration(
+                  'URL del streaming',
+                  hint: 'https://servidor.com/stream.mp3',
+                ).copyWith(
+                  // La X solo aparece cuando hay texto, en gris
+                  suffixIcon: _urlController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Borrar URL',
+                          icon: const Icon(
+                            Icons.close,
+                            size: 18,
+                            color: AppColors.textHint,
+                          ),
+                          onPressed: () =>
+                              setState(() => _urlController.clear()),
+                        ),
+                ),
+            // Redibuja para mostrar u ocultar la X mientras escribes
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 10),
           TextField(

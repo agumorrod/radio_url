@@ -8,6 +8,8 @@ class SettingsRepository {
   static const String _radioUrlKey = 'radio_stream_url';
   static const String _stationsKey = 'stations_list';
   static const String _currentStationKey = 'current_station_id';
+  static const String _addButtonXKey = 'add_button_x';
+  static const String _addButtonYKey = 'add_button_y';
 
   // ─── Radio URL ───────────────────────────────────────────────────────────────
 
@@ -57,5 +59,24 @@ class SettingsRepository {
   Future<void> saveCurrentStationId(String stationId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_currentStationKey, stationId);
+  }
+
+  // ─── Posición del botón "+" ──────────────────────────────────────────────────
+
+  /// Se guarda como fracción (0.0 a 1.0) del espacio disponible, no en píxeles,
+  /// así sigue siendo válida si cambia el tamaño de la pantalla.
+  /// Devuelve [x, y] o null si el usuario nunca lo ha movido.
+  Future<List<double>?> getAddButtonPosition() async {
+    final prefs = await SharedPreferences.getInstance();
+    final x = prefs.getDouble(_addButtonXKey);
+    final y = prefs.getDouble(_addButtonYKey);
+    if (x == null || y == null) return null;
+    return [x, y];
+  }
+
+  Future<void> saveAddButtonPosition(double x, double y) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_addButtonXKey, x);
+    await prefs.setDouble(_addButtonYKey, y);
   }
 }

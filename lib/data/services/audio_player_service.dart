@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'dart:async';
 
 enum PlaybackType { none, radio, podcast }
 
@@ -95,12 +96,17 @@ class AudioPlayerService {
     _currentType = PlaybackType.radio;
     _currentPodcastId = null;
     try {
-      // await _startForeground(title: 'Radio URL', subtitle: 'En directo');
       await _startForeground(title: title, subtitle: 'En directo');
       await _player.stop();
       await _player.setUrl(url);
-      await _player.play();
+      // Sin await: play() no termina mientras suena (es un directo). Así esta
+      // función devuelve cuando el streaming YA está cargado, y si setUrl() falla
+      // el error llega al catch de abajo.
+      unawaited(_player.play().catchError((_) {}));
     } catch (e) {
+      // Si falla, quitamos la notificación en primer plano que se acababa de crear
+      _currentType = PlaybackType.none;
+      await _stopForeground();
       throw Exception('Error al reproducir radio: $e');
     }
   }

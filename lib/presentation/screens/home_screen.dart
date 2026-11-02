@@ -110,13 +110,30 @@ class HomeScreen extends ConsumerWidget {
                   return _PlayButton(
                     isPlaying: isPlaying,
                     onTap: streamUrl != null && streamUrl.isNotEmpty
-                        ? () => ref
-                              .read(radioPlaybackProvider.notifier)
-                              .toggle(
-                                streamUrl,
-                                title:
-                                    currentStation?.name ?? 'Radio Trebujena',
-                              )
+                        ? () async {
+                            try {
+                              await ref
+                                  .read(radioPlaybackProvider.notifier)
+                                  .toggle(
+                                    streamUrl,
+                                    title:
+                                        currentStation?.name ??
+                                        'Radio Trebujena',
+                                    stationId: currentStation?.id,
+                                  );
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'No se pudo reproducir la emisora',
+                                    ),
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                              }
+                            }
+                          }
                         : null,
                   );
                 },

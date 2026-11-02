@@ -11,7 +11,7 @@ class StationCard extends ConsumerWidget {
   final VoidCallback? onFavoriteToggle;
 
   /// Pulsación larga. Recibe el rectángulo que ocupa la tarjeta en la pantalla,
-  /// para poder colocar los botones flotantes justo a su altura.
+  /// para poder colocar la ventana de acciones justo a su altura.
   final void Function(Rect cardRect)? onLongPress;
 
   const StationCard({
@@ -23,6 +23,7 @@ class StationCard extends ConsumerWidget {
 
   Future<void> _onPlayPressed(BuildContext context, WidgetRef ref) async {
     try {
+      // Si falla, el provider ya la marca como no disponible y la anota en el registro
       await ref.read(radioPlaybackProvider.notifier).toggleStation(station);
     } catch (_) {
       // Con listas de 200 URLs es normal que alguna esté caída o mal escrita
@@ -54,6 +55,12 @@ class StationCard extends ConsumerWidget {
     final isRadioPlaying = ref.watch(radioPlaybackProvider);
     final isThisPlaying = isCurrent && isRadioPlaying;
 
+    // ¿No se pudo reproducir o no respondió en la comprobación de arranque?
+    // El select hace que solo se redibuje la tarjeta afectada, no las 200
+    final isUnavailable = ref.watch(
+      unavailableStationsProvider.select((ids) => ids.contains(station.id)),
+    );
+
     // El margen va FUERA del Builder para medir solo la tarjeta, sin el hueco inferior
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -64,7 +71,10 @@ class StationCard extends ConsumerWidget {
               : () => _handleLongPress(cardContext),
           child: Container(
             decoration: BoxDecoration(
-              color: AppColors.card,
+              // Fondo más apagado cuando la emisora no está disponible
+              color: isUnavailable
+                  ? AppColors.card.withValues(alpha: 0.45)
+                  : AppColors.card,
               borderRadius: BorderRadius.circular(AppDimensions.borderRadius),
               // Borde verde en la emisora activa para localizarla en la lista
               border: isCurrent
@@ -75,66 +85,87 @@ class StationCard extends ConsumerWidget {
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  // Icono de la emisora: el elegido a mano o el automático por categoría
-                  Container(
-                    width: AppDimensions.avatarSize,
-                    height: AppDimensions.avatarSize,
-                    decoration: BoxDecoration(
-                      color: AppColors.cardLight,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      StationIcons.iconFor(station.iconKey, station.category),
-                      color: isCurrent ? AppColors.primary : AppColors.textHint,
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  // Nombre y metadatos
+                  // Icono + textos: se atenúan si no está disponible. Los botones
+                  // de la derecha quedan FUERA del Opacity, así que siguen activos
+                  // y con su color normal.
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          station.name,
-                          style: AppTextStyles.podcastTitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            // Ancho máximo para que una categoría larga no empuje la URL
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 110),
-                              child: Text(
+                    child: Opacity(
+                      opacity: isUnavailable ? 0.4 : 1,
+                      child: Row(
+                        children: [
+                          // Icono de la emisora: el elegido a mano o el automático por categoría
+                          Container(
+                            width: AppDimensions.avatarSize,
+                            height: AppDimensions.avatarSize,
+                            decoration: BoxDecoration(
+                              color: AppColors.cardLight,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              StationIcons.iconFor(
+                                station.iconKey,
                                 station.category,
-                                style: AppTextStyles.podcastMeta,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
+                              color: isCurrent
+                                  ? AppColors.primary
+                                  : AppColors.textHint,
                             ),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 6),
-                              child: Text(
-                                '•',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
+                          ),
+
+                          const SizedBox(width: 12),
+
+                          // Nombre y metadatos
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  station.name,
+                                  style: AppTextStyles.podcastTitle,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    // Ancho máximo para que una categoría larga no empuje la URL
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 110,
+                                      ),
+                                      child: Text(
+                                        station.category,
+                                        style: AppTextStyles.podcastMeta,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      child: Text(
+                                        '•',
+                                        style: TextStyle(
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                    Flexible(
+                                      child: Text(
+                                        station.url,
+                                        style: AppTextStyles.podcastMeta,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                            Flexible(
-                              child: Text(
-                                station.url,
-                                style: AppTextStyles.podcastMeta,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
