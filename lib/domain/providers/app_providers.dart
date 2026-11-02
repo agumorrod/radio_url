@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:radio_url/data/models/station.dart';
 import 'package:radio_url/data/repositories/settings_repository.dart';
@@ -12,7 +13,9 @@ final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
 
 final audioServiceProvider = Provider<AudioPlayerService>((ref) {
   final service = AudioPlayerService();
-  ref.onDispose(service.dispose);
+  ref.onDispose(() {
+    unawaited(service.dispose());
+  });
   return service;
 });
 
@@ -174,12 +177,22 @@ class RadioPlaybackNotifier extends Notifier<bool> {
   @override
   bool build() {
     final audioService = ref.read(audioServiceProvider);
-    audioService.playerStateStream.listen((playerState) {
+
+    final subscription = audioService.playerStateStream.listen((playerState) {
       final isActuallyPlaying =
           playerState.playing && audioService.currentType == PlaybackType.radio;
-      if (state != isActuallyPlaying) state = isActuallyPlaying;
+
+      if (state != isActuallyPlaying) {
+        state = isActuallyPlaying;
+      }
     });
-    return false;
+
+    ref.onDispose(() {
+      unawaited(subscription.cancel());
+    });
+
+    return audioService.isPlaying &&
+        audioService.currentType == PlaybackType.radio;
   }
 
   /// Play/pausa desde Inicio

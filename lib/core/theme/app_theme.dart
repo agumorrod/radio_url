@@ -49,8 +49,10 @@ class AppTheme {
           borderSide: BorderSide.none,
         ),
         hintStyle: AppTextStyles.subtitle,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
       ),
     );
   }

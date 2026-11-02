@@ -15,7 +15,9 @@ class FavoritesScreen extends ConsumerWidget {
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppDimensions.screenPadding),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppDimensions.screenPadding,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -50,8 +52,11 @@ class FavoritesScreen extends ConsumerWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.favorite_border,
-                                color: AppColors.textHint, size: 48),
+                            Icon(
+                              Icons.favorite_border,
+                              color: AppColors.textHint,
+                              size: 48,
+                            ),
                             SizedBox(height: 12),
                             Text(
                               'Aún no tienes favoritos',

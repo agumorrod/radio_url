@@ -29,6 +29,7 @@ class Station {
     String? url,
     String? category,
     String? iconKey,
+    bool clearIconKey = false,
     bool? isFavorite,
   }) {
     return Station(
@@ -36,7 +37,7 @@ class Station {
       name: name ?? this.name,
       url: url ?? this.url,
       category: category ?? this.category,
-      iconKey: iconKey ?? this.iconKey,
+      iconKey: clearIconKey ? null : (iconKey ?? this.iconKey),
       isFavorite: isFavorite ?? this.isFavorite,
     );
   }

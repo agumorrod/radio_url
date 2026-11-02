@@ -30,7 +30,6 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
-  wakelock_plus: ^1.2.10   # ← añade esta línea
 
 dev_dependencies:
   flutter_test:

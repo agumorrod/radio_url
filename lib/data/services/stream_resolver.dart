@@ -5,10 +5,12 @@ import 'package:dio/dio.dart';
 /// ExoPlayer (just_audio en Android) reproduce MP3, AAC y HLS (.m3u8), pero NO
 /// entiende los .m3u / .pls: son archivos de texto que contienen la URL de verdad.
 class StreamResolver {
-  final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 8),
-    receiveTimeout: const Duration(seconds: 8),
-  ));
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 8),
+      receiveTimeout: const Duration(seconds: 8),
+    ),
+  );
 
   Future<String> resolve(String url) async {
     // Ignoramos la query (?token=...) para mirar solo la extensión
