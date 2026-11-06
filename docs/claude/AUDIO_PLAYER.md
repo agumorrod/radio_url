@@ -1,0 +1,69 @@
+# Reproductor de audio
+
+## Implementación
+
+`AudioPlayerService` es un singleton que encapsula un único `just_audio.AudioPlayer`. Coordina además `WakelockPlus` y un MethodChannel Android.
+
+`PlaybackType` contiene `none`, `radio` y `podcast`. El servicio implementa `playRadio` y `playPodcast`, aunque la existencia del segundo método no demuestra que haya una funcionalidad completa de podcasts en la UI.
+
+## Reproducción de radio
+
+`playRadio(url, title:)`:
+
+1. Marca el tipo actual como `radio` y limpia el ID de podcast.
+2. Solicita iniciar el servicio foreground Android y actualiza el wakelock.
+3. Detiene la fuente anterior.
+4. Carga la nueva URL con `setUrl`.
+5. Lanza `play()` sin esperarlo, porque un stream en directo no termina mientras está reproduciéndose.
+6. Si la preparación/carga falla, cambia el tipo a `none`, detiene el foreground y relanza el error.
+
+El provider resuelve previamente M3U/PLS mediante `StreamResolver`, antes de llamar al servicio.
+
+## Pausa, reanudación y parada
+
+- `pause()` actualiza el foreground/wakelock y pausa el player.
+- `resume()` reanuda el foreground/wakelock y el player.
+- `stop()` limpia el tipo y el ID de podcast, detiene foreground/wakelock y para el player.
+- `seek()` y `setVolume()` delegan en `just_audio`.
+- El volumen se limita al intervalo 0.0–1.0; el provider observado parte de 0.7.
+
+## Buffer
+
+La configuración observada de `AndroidLoadControl` usa buffer mínimo de 50 segundos y máximo de 120 segundos, con prioridad de tiempo sobre tamaño.
+
+## MethodChannel
+
+Canal: `es.app.radio_url/foreground`
+
+Flutter → Android:
+- `startService`
+- `pauseService`
+- `resumeService`
+- `stopService`
+
+Android → Flutter:
+- `onPause`
+- `onResume`
+- `onStop`
+
+Los callbacks nativos actúan sobre el player y el wakelock. Comprueba que cualquier cambio en nombres de métodos o payloads se refleje en ambos lados.
+
+## Errores
+
+`describePlaybackError` traduce algunos errores de ExoPlayer/just_audio, incluyendo códigos HTTP, host no resoluble, timeout, cleartext HTTP, conexión rechazada y formato de entrada no reconocido. Los mensajes deben seguir siendo informativos sin ocultar el error técnico en logs de depuración.
+
+## Puntos de auditoría
+
+- `play()` se lanza con `unawaited` y su error se captura y descarta en el servicio; la UI/provider no recibe necesariamente errores asíncronos que aparezcan después de que `setUrl` haya tenido éxito. Revisa esta decisión antes de cambiar el flujo.
+- `dispose()` invoca `_stopForeground()` y `_player.dispose()` sin esperar explícitamente las operaciones asíncronas. Verifica el contrato y el ciclo de vida antes de corregirlo.
+- `RadioPlaybackNotifier` escucha `playerStateStream`; confirma la gestión de la suscripción y su cancelación al destruir el provider.
+- Evita que estado `playing`, `currentType`, notificación y wakelock se desincronicen.
+
+## Pruebas recomendadas
+
+- Preparación y reproducción de URL válida.
+- Fallo de `setUrl`, error posterior de `play`, desconexión y timeout.
+- Cambio rápido de emisora.
+- Pausa/reanudación desde UI y notificación.
+- Parada y limpieza de foreground/wakelock.
+- Liberación del singleton y cancelación de listeners.
