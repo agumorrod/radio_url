@@ -10,6 +10,7 @@ Métodos Flutter → Android:
 - `startService`
 - `pauseService`
 - `resumeService`
+- `updatePlaybackState`
 - `stopService`
 
 Callbacks Android → Flutter:
@@ -18,6 +19,8 @@ Callbacks Android → Flutter:
 - `onStop`
 
 El servicio observado utiliza un canal de notificación `radio_url_channel`, ID `1`, tipo foreground `mediaPlayback` y `START_STICKY`.
+
+`updatePlaybackState` actualiza el icono/acción y subtítulo de la notificación sin callback a Flutter. `AudioPlayerService` lo invoca desde su listener de estado para evitar realimentar `pause`/`resume`.
 
 ## Permisos
 
