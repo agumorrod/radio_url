@@ -56,7 +56,7 @@ class HomeScreen extends ConsumerWidget {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primary.withValues(green: 0.15),
+                      color: AppColors.primary.withValues(alpha: 0.15),
                       blurRadius: 40,
                       spreadRadius: 5,
                     ),
@@ -266,7 +266,7 @@ class _PlayButtonState extends ConsumerState<_PlayButton> {
           shape: BoxShape.circle,
           border: Border.all(
             color: widget.onTap != null
-                ? AppColors.primary.withValues(green: 0.3)
+                ? AppColors.primary.withValues(alpha: 0.3)
                 : Colors.transparent,
             width: 1.5,
           ),
