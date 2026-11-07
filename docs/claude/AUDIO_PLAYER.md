@@ -17,6 +17,8 @@
 5. Lanza `play()` sin esperarlo, porque un stream en directo no termina mientras está reproduciéndose.
 6. Si la preparación/carga falla, cambia el tipo a `none`, detiene el foreground y relanza el error.
 
+Cada carga de radio recibe un token. Las comprobaciones tras las operaciones asíncronas impiden que una petición superada inicie el siguiente paso. Si `setUrl` queda interrumpido por una petición posterior, su `catch` no cambia el tipo de reproducción, no detiene el foreground ni propaga el error. El provider usa su propio token para descartar resultados obsoletos antes de cambiar disponibilidad, registrar errores o mostrar un snackbar.
+
 El provider resuelve previamente M3U/PLS mediante `StreamResolver`, antes de llamar al servicio.
 
 ## Pausa, reanudación y parada

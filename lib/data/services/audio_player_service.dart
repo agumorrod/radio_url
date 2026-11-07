@@ -32,6 +32,7 @@ class AudioPlayerService {
           await WakelockPlus.enable();
           break;
         case 'onStop':
+          _radioRequestId++;
           _currentType = PlaybackType.none;
           _currentPodcastId = null;
           await _player.stop();
@@ -46,6 +47,7 @@ class AudioPlayerService {
   late final AudioPlayer _player;
   PlaybackType _currentType = PlaybackType.none;
   String? _currentPodcastId;
+  int _radioRequestId = 0;
 
   PlaybackType get currentType => _currentType;
   String? get currentPodcastId => _currentPodcastId;
@@ -93,17 +95,28 @@ class AudioPlayerService {
   // ─── Radio ───────────────────────────────────────────────────────────────────
 
   Future<void> playRadio(String url, {String title = 'Radio Trebujena'}) async {
+    final requestId = ++_radioRequestId;
     _currentType = PlaybackType.radio;
     _currentPodcastId = null;
     try {
       await _startForeground(title: title, subtitle: 'En directo');
+      if (requestId != _radioRequestId) return;
+
       await _player.stop();
+      if (requestId != _radioRequestId) return;
+
       await _player.setUrl(url);
+      if (requestId != _radioRequestId) return;
+
       // Sin await: play() no termina mientras suena (es un directo). Así esta
       // función devuelve cuando el streaming YA está cargado, y si setUrl() falla
       // el error llega al catch de abajo.
       unawaited(_player.play().catchError((_) {}));
     } catch (e) {
+      // setUrl puede fallar con PlayerInterruptedException si otra emisora
+      // inició una carga más reciente. Esa petición nueva controla el player.
+      if (requestId != _radioRequestId) return;
+
       // Si falla, quitamos la notificación en primer plano que se acababa de crear
       _currentType = PlaybackType.none;
       await _stopForeground();
@@ -118,6 +131,7 @@ class AudioPlayerService {
     String podcastId, {
     String title = 'Podcast: ',
   }) async {
+    _radioRequestId++;
     _currentType = PlaybackType.podcast;
     _currentPodcastId = podcastId;
     try {
@@ -142,6 +156,7 @@ class AudioPlayerService {
   }
 
   Future<void> stop() async {
+    _radioRequestId++;
     _currentType = PlaybackType.none;
     _currentPodcastId = null;
     await _stopForeground();
