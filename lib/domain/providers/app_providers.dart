@@ -407,7 +407,7 @@ final radioPlaybackProvider = NotifierProvider<RadioPlaybackNotifier, bool>(
 
 class VolumeNotifier extends Notifier<double> {
   @override
-  double build() => 0.7;
+  double build() => AudioPlayerService.defaultVolume;
 
   Future<void> setVolume(double volume) async {
     final audioService = ref.read(audioServiceProvider);

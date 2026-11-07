@@ -29,7 +29,7 @@ El provider resuelve previamente M3U/PLS mediante `StreamResolver`, antes de lla
 - `resume()` vuelve a cargar la URL de radio activa, igual que el botón de reproducción de la app; para otros tipos lanza `play()` sin esperarlo. El listener sincroniza foreground/wakelock.
 - `stop()` limpia el tipo y el ID de podcast, detiene foreground/wakelock y para el player.
 - `seek()` y `setVolume()` delegan en `just_audio`.
-- El volumen se limita al intervalo 0.0–1.0; el provider observado parte de 0.7.
+- El volumen inicial compartido por el servicio y el provider es 0.7. El servicio lo aplica al crear el player y espera esa operación antes de iniciar audio; los cambios posteriores se limitan al intervalo 0.0–1.0.
 
 ## Buffer
 
