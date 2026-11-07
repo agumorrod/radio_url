@@ -320,6 +320,8 @@ final currentStationProvider = Provider<Station?>((ref) {
 // ─── Radio Playback Provider ───────────────────────────────────────────────────
 
 class RadioPlaybackNotifier extends Notifier<bool> {
+  int _playRequestId = 0;
+
   @override
   bool build() {
     final audioService = ref.read(audioServiceProvider);
@@ -362,13 +364,18 @@ class RadioPlaybackNotifier extends Notifier<bool> {
   ///  - Si funciona: vuelve a estar disponible (aunque estuviera marcada como caída).
   /// El error se relanza para que la pantalla muestre el aviso inferior.
   Future<void> _playTracked(String url, String title, String? stationId) async {
+    final requestId = ++_playRequestId;
     final unavailable = ref.read(unavailableStationsProvider.notifier);
     try {
-      await _play(url, title);
+      await _play(url, title, requestId);
+      if (requestId != _playRequestId) return;
       if (stationId != null) {
         unavailable.markAvailable(stationId);
       }
     } catch (e) {
+      // Si otra emisora ya sustituyó esta petición, su interrupción no es un
+      // fallo de la emisora y no debe generar snackbar ni registro de error.
+      if (requestId != _playRequestId) return;
       if (stationId != null) {
         unavailable.markUnavailable(stationId);
       }
@@ -381,9 +388,11 @@ class RadioPlaybackNotifier extends Notifier<bool> {
     }
   }
 
-  Future<void> _play(String url, String title) async {
+  Future<void> _play(String url, String title, int requestId) async {
     // Si la URL es un .m3u / .pls se sustituye por la URL real del streaming
     final streamUrl = await ref.read(streamResolverProvider).resolve(url);
+    if (requestId != _playRequestId) return;
+
     await ref.read(audioServiceProvider).playRadio(streamUrl, title: title);
   }
 
