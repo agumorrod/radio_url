@@ -51,7 +51,7 @@ En `lib/domain/providers/app_providers.dart` se observan:
 2. `stationsProvider` carga la lista desde `SettingsRepository`; si nunca se ha guardado una lista, crea la emisora inicial por defecto.
 3. Las operaciones de alta, edición, borrado y favoritos actualizan la lista y la persisten.
 4. `favoritesProvider` deriva los favoritos desde `isFavorite`.
-5. `currentStationProvider` resuelve el ID persistido contra la lista actual; si la emisora ya no existe, devuelve `null`.
+5. `currentStationProvider` resuelve el ID persistido contra la lista actual; si la emisora ya no existe, devuelve `null`. Al borrar la emisora seleccionada, `StationsNotifier.remove` detiene la reproducción y limpia el ID persistido antes de guardar la lista nueva.
 6. `stationHealthProvider` realiza una comprobación de red al inicio de la ejecución y actualiza los providers de disponibilidad y registro.
 7. `radioPlaybackProvider` resuelve la URL y coordina `AudioPlayerService`.
 

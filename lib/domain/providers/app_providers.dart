@@ -195,6 +195,11 @@ class StationsNotifier extends AsyncNotifier<List<Station>> {
 
   Future<void> remove(String stationId) async {
     final current = state.value ?? [];
+    final currentStationId = await ref.read(currentStationIdProvider.future);
+    if (currentStationId == stationId) {
+      await ref.read(radioPlaybackProvider.notifier).stop();
+      await ref.read(currentStationIdProvider.notifier).clear();
+    }
     await _save(current.where((s) => s.id != stationId).toList());
   }
 
@@ -299,6 +304,11 @@ class CurrentStationIdNotifier extends AsyncNotifier<String?> {
     await ref.read(settingsRepositoryProvider).saveCurrentStationId(stationId);
     state = AsyncData(stationId);
   }
+
+  Future<void> clear() async {
+    state = const AsyncData<String?>(null);
+    await ref.read(settingsRepositoryProvider).clearCurrentStationId();
+  }
 }
 
 final currentStationIdProvider =
@@ -357,6 +367,12 @@ class RadioPlaybackNotifier extends Notifier<bool> {
       await ref.read(currentStationIdProvider.notifier).select(station.id);
       await _playTracked(station.url, station.name, station.id);
     }
+  }
+
+  Future<void> stop() async {
+    _playRequestId++;
+    await ref.read(audioServiceProvider).stop();
+    state = false;
   }
 
   /// Reproduce y deja constancia del resultado:
