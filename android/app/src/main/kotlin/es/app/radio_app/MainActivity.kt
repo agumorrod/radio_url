@@ -70,6 +70,23 @@ class MainActivity : FlutterActivity() {
                     startService(intent)
                     result.success(null)
                 }
+                "updatePlaybackState" -> {
+                    intent.action = AudioForegroundService.ACTION_UPDATE_PLAYBACK_STATE
+                    intent.putExtra(
+                        AudioForegroundService.EXTRA_IS_PLAYING,
+                        call.argument<Boolean>("isPlaying") ?: false
+                    )
+                    intent.putExtra(
+                        AudioForegroundService.EXTRA_TITLE,
+                        call.argument<String>("title") ?: "Radio URL"
+                    )
+                    intent.putExtra(
+                        AudioForegroundService.EXTRA_SUBTITLE,
+                        call.argument<String>("subtitle") ?: ""
+                    )
+                    startService(intent)
+                    result.success(null)
+                }
                 "stopService" -> {
                     intent.action = AudioForegroundService.ACTION_STOP
                     startService(intent)

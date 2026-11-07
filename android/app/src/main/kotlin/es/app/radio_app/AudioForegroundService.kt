@@ -25,8 +25,10 @@ class AudioForegroundService : Service() {
         const val ACTION_STOP     = "ACTION_STOP"
         const val ACTION_PAUSE    = "ACTION_PAUSE"
         const val ACTION_RESUME   = "ACTION_RESUME"
+        const val ACTION_UPDATE_PLAYBACK_STATE = "ACTION_UPDATE_PLAYBACK_STATE"
         const val EXTRA_TITLE     = "EXTRA_TITLE"
         const val EXTRA_SUBTITLE  = "EXTRA_SUBTITLE"
+        const val EXTRA_IS_PLAYING = "EXTRA_IS_PLAYING"
     }
 
     private var isPlaying = true
@@ -64,6 +66,11 @@ class AudioForegroundService : Service() {
                 mainHandler.post {
                     MainActivity.flutterChannel?.invokeMethod("onResume", null)
                 }
+            }
+            ACTION_UPDATE_PLAYBACK_STATE -> {
+                isPlaying = intent?.getBooleanExtra(EXTRA_IS_PLAYING, false) ?: false
+                subtitle = intent?.getStringExtra(EXTRA_SUBTITLE) ?: subtitle
+                updateNotification()
             }
             ACTION_STOP -> {
                 mainHandler.post {

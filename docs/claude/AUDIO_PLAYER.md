@@ -4,6 +4,8 @@
 
 `AudioPlayerService` es un singleton que encapsula un único `just_audio.AudioPlayer`. Coordina además `WakelockPlus` y un MethodChannel Android.
 
+El servicio escucha `playerStateStream` y `errorStream` en un único punto de sincronización: el wakelock sigue `playing`, y la notificación Android cambia entre Pausar/Reproducir y En directo/En pausa. La acción nativa `updatePlaybackState` solo actualiza la notificación; no devuelve un callback al player, evitando ciclos de pausa/reanudación.
+
 `PlaybackType` contiene `none`, `radio` y `podcast`. El servicio implementa `playRadio` y `playPodcast`, aunque la existencia del segundo método no demuestra que haya una funcionalidad completa de podcasts en la UI.
 
 ## Reproducción de radio
@@ -24,7 +26,7 @@ El provider resuelve previamente M3U/PLS mediante `StreamResolver`, antes de lla
 ## Pausa, reanudación y parada
 
 - `pause()` actualiza el foreground/wakelock y pausa el player.
-- `resume()` reanuda el foreground/wakelock y el player.
+- `resume()` reanuda el player; el listener actualiza foreground/wakelock a partir del estado emitido.
 - `stop()` limpia el tipo y el ID de podcast, detiene foreground/wakelock y para el player.
 - `seek()` y `setVolume()` delegan en `just_audio`.
 - El volumen se limita al intervalo 0.0–1.0; el provider observado parte de 0.7.
@@ -41,6 +43,7 @@ Flutter → Android:
 - `startService`
 - `pauseService`
 - `resumeService`
+- `updatePlaybackState` (actualiza la notificación sin callback a Flutter)
 - `stopService`
 
 Android → Flutter:
@@ -56,7 +59,7 @@ Los callbacks nativos actúan sobre el player y el wakelock. Comprueba que cualq
 
 ## Puntos de auditoría
 
-- `play()` se lanza con `unawaited` y su error se captura y descarta en el servicio; la UI/provider no recibe necesariamente errores asíncronos que aparezcan después de que `setUrl` haya tenido éxito. Revisa esta decisión antes de cambiar el flujo.
+- `play()` se lanza con `unawaited`; `errorStream` sincroniza los indicadores de reproducción cuando falla después de `setUrl`.
 - `dispose()` invoca `_stopForeground()` y `_player.dispose()` sin esperar explícitamente las operaciones asíncronas. Verifica el contrato y el ciclo de vida antes de corregirlo.
 - `RadioPlaybackNotifier` escucha `playerStateStream`; confirma la gestión de la suscripción y su cancelación al destruir el provider.
 - Evita que estado `playing`, `currentType`, notificación y wakelock se desincronicen.
