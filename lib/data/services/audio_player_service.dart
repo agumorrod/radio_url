@@ -34,12 +34,13 @@ class AudioPlayerService {
           await _player.pause();
           break;
         case 'onResume':
-          await _player.play();
+          await _resumeCurrentPlayback();
           break;
         case 'onStop':
           _radioRequestId++;
           _currentType = PlaybackType.none;
           _currentPodcastId = null;
+          _currentRadioUrl = null;
           _foregroundStarted = false;
           _lastNotifiedPlaying = null;
           await _player.stop();
@@ -55,6 +56,8 @@ class AudioPlayerService {
   late final StreamSubscription<PlayerException> _playerErrorSubscription;
   PlaybackType _currentType = PlaybackType.none;
   String? _currentPodcastId;
+  String? _currentRadioUrl;
+  String _currentRadioTitle = 'Radio Trebujena';
   int _radioRequestId = 0;
   String _foregroundTitle = 'Radio URL';
   String _foregroundSubtitle = 'En directo';
@@ -127,6 +130,8 @@ class AudioPlayerService {
     final requestId = ++_radioRequestId;
     _currentType = PlaybackType.radio;
     _currentPodcastId = null;
+    _currentRadioUrl = url;
+    _currentRadioTitle = title;
     try {
       await _startForeground(title: title, subtitle: 'En directo');
       if (requestId != _radioRequestId) return;
@@ -148,6 +153,7 @@ class AudioPlayerService {
 
       // Si falla, quitamos la notificación en primer plano que se acababa de crear
       _currentType = PlaybackType.none;
+      _currentRadioUrl = null;
       await _stopForeground();
       throw Exception('Error al reproducir radio: $e');
     }
@@ -163,6 +169,7 @@ class AudioPlayerService {
     _radioRequestId++;
     _currentType = PlaybackType.podcast;
     _currentPodcastId = podcastId;
+    _currentRadioUrl = null;
     try {
       await _startForeground(title: title, subtitle: '');
       await _player.stop();
@@ -179,13 +186,25 @@ class AudioPlayerService {
   }
 
   Future<void> resume() async {
-    await _player.play();
+    await _resumeCurrentPlayback();
+  }
+
+  Future<void> _resumeCurrentPlayback() async {
+    if (_currentType == PlaybackType.radio) {
+      final url = _currentRadioUrl;
+      if (url == null) return;
+      await playRadio(url, title: _currentRadioTitle);
+      return;
+    }
+
+    unawaited(_player.play().catchError((_) {}));
   }
 
   Future<void> stop() async {
     _radioRequestId++;
     _currentType = PlaybackType.none;
     _currentPodcastId = null;
+    _currentRadioUrl = null;
     await _stopForeground();
     await _player.stop();
   }
