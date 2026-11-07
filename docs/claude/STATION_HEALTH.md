@@ -62,7 +62,7 @@ Formatos admitidos:
 
 Las URLs deben empezar por `http://` o `https://`. Las líneas inválidas se añaden a `issues`, en lugar de descartarse silenciosamente.
 
-Importante: las URLs que empiezan por `http` no se separan por `;`, porque algunos streams Shoutcast terminan en `;` (por ejemplo, `http://host:8000/;`).
+En filas `Nombre;URL;Categoría`, el parser usa el primer `;` para separar el nombre y el último para separar la categoría; conserva los `;` intermedios dentro de la URL. Así se admiten URLs Shoutcast terminadas en `;` (por ejemplo, `http://host:8000/;`) sin perder la categoría al reimportar una exportación.
 
 `toText` exporta como `Nombre;URL;Categoría`. Los puntos y coma en nombre/categoría se sustituyen por comas para no romper el formato.
 
