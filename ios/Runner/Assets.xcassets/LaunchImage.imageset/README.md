@@ -59,7 +59,7 @@ key.properties
 
 ### Paso 3: Subir el código desde la terminal
 
-Ejecuta estos comandos en la carpeta raíz de tu proyecto (`radio_app/`):
+Ejecuta estos comandos en la carpeta raíz de tu proyecto (`radio_url/`):
 
 ```bash
 # 1. Inicializar Git en el proyecto
@@ -85,7 +85,7 @@ git push -u origin main
 En GitHub deberías ver algo así (sin carpeta `build/` ni `Pods/`):
 
 ```
-radio_app/
+radio_url/
 ├── android/
 ├── ios/
 ├── lib/
@@ -96,7 +96,7 @@ radio_app/
 │   └── presentation/
 ├── assets/
 │   └── images/
-│       └── radio_avatar.jpg
+│       └── radio_avatar.png
 ├── .gitignore
 ├── pubspec.yaml
 └── README.md
@@ -196,7 +196,7 @@ flutter build ios --release
 | Nombre de la radio | `lib/presentation/screens/home_screen.dart` |
 | Dial (FM 95.5) | `lib/presentation/screens/home_screen.dart` |
 | URL por defecto | `lib/domain/providers/app_providers.dart` → `_defaultUrl` |
-| Avatar de la radio | `assets/images/radio_avatar.jpg` |
+| Avatar de la radio | `assets/images/radio_avatar.png` |
 | Nombre de la app | `android/app/src/main/AndroidManifest.xml` → `android:label` |
 | Color acento | `lib/core/constants/app_constants.dart` → `AppColors.primary` |
 | Podcasts reales (iVoox) | `lib/domain/providers/app_providers.dart` → `PodcastsNotifier.build()` |

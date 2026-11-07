@@ -1,4 +1,4 @@
-package es.app.radio_app
+package es.app.radio_url
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -19,18 +19,20 @@ import androidx.core.app.NotificationCompat
 class AudioForegroundService : Service() {
 
     companion object {
-        const val CHANNEL_ID      = "radio_trebujena_channel"
+        const val CHANNEL_ID      = "radio_url_channel"
         const val NOTIFICATION_ID = 1
         const val ACTION_START    = "ACTION_START"
         const val ACTION_STOP     = "ACTION_STOP"
         const val ACTION_PAUSE    = "ACTION_PAUSE"
         const val ACTION_RESUME   = "ACTION_RESUME"
+        const val ACTION_UPDATE_PLAYBACK_STATE = "ACTION_UPDATE_PLAYBACK_STATE"
         const val EXTRA_TITLE     = "EXTRA_TITLE"
         const val EXTRA_SUBTITLE  = "EXTRA_SUBTITLE"
+        const val EXTRA_IS_PLAYING = "EXTRA_IS_PLAYING"
     }
 
     private var isPlaying = true
-    private var title     = "Radio Trebujena"
+    private var title     = "Radio URL"
     private var subtitle  = "En directo"
 
     // Handler en el main thread para llamar a Flutter de forma segura
@@ -65,6 +67,11 @@ class AudioForegroundService : Service() {
                     MainActivity.flutterChannel?.invokeMethod("onResume", null)
                 }
             }
+            ACTION_UPDATE_PLAYBACK_STATE -> {
+                isPlaying = intent?.getBooleanExtra(EXTRA_IS_PLAYING, false) ?: false
+                subtitle = intent?.getStringExtra(EXTRA_SUBTITLE) ?: subtitle
+                updateNotification()
+            }
             ACTION_STOP -> {
                 mainHandler.post {
                     MainActivity.flutterChannel?.invokeMethod("onStop", null)
@@ -81,7 +88,7 @@ class AudioForegroundService : Service() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Radio Trebujena",
+            "Radio URL",
             NotificationManager.IMPORTANCE_LOW // IMPORTANCE_LOW = sin sonido
         ).apply {
             description = "Reproducción de audio en segundo plano"

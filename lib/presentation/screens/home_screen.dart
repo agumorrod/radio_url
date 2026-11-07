@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../core/constants/app_constants.dart';
 import '../../domain/providers/app_providers.dart';
@@ -13,6 +12,7 @@ class HomeScreen extends ConsumerWidget {
     final radioUrlAsync = ref.watch(radioUrlProvider);
     final isPlaying = ref.watch(radioPlaybackProvider);
     final volume = ref.watch(volumeProvider);
+    final currentStation = ref.watch(currentStationProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -53,10 +53,7 @@ class HomeScreen extends ConsumerWidget {
                 width: AppDimensions.avatarSizeLarge,
                 height: AppDimensions.avatarSizeLarge,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(
-                    AppDimensions.borderRadiusLarge,
-                  ),
-                  color: AppColors.card,
+                  shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.primary.withValues(green: 0.15),
@@ -65,12 +62,9 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(
-                    AppDimensions.borderRadiusLarge,
-                  ),
+                child: ClipOval(
                   child: Image.asset(
-                    'assets/images/radio_avatar.jpg',
+                    'assets/images/radio_avatar.png',
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => const Icon(
                       Icons.radio,
@@ -81,30 +75,72 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 36),
 
               // ─── Nombre y dial ───────────────────────────────────────────────
-              const Text('Radio Trebujena', style: AppTextStyles.radioName),
-              const SizedBox(height: 6),
-              const Text('107.7 FM', style: AppTextStyles.radioDial),
+              // const Text('Radio URL', style: AppTextStyles.radioName),
+              // const SizedBox(height: 6),
 
-              const SizedBox(height: 36),
+              // 2) Sustituye el nombre y el dial:
+              Text(
+                currentStation?.name ?? 'Radio Trebujena',
+                style: AppTextStyles.radioName,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                currentStation?.category ?? '107.7 FM',
+                style: AppTextStyles.radioDial,
+              ),
+
+              // const Text('107.7 FM', style: AppTextStyles.radioDial),
+              const SizedBox(height: 20),
 
               // ─── Botón Play / Pausa ──────────────────────────────────────────
               radioUrlAsync.when(
                 loading: () =>
                     const CircularProgressIndicator(color: AppColors.primary),
                 error: (_, _) => _PlayButton(isPlaying: false, onTap: () {}),
-                data: (url) => _PlayButton(
-                  isPlaying: isPlaying,
-                  onTap: url != null && url.isNotEmpty
-                      ? () =>
-                            ref.read(radioPlaybackProvider.notifier).toggle(url)
-                      : null,
-                ),
+                // 3) En el radioUrlAsync.when, sustituye el data:
+                data: (url) {
+                  // La emisora elegida en Radios manda; si no hay ninguna, la URL de Ajustes
+                  final streamUrl = currentStation?.url ?? url;
+                  return _PlayButton(
+                    isPlaying: isPlaying,
+                    onTap: streamUrl != null && streamUrl.isNotEmpty
+                        ? () async {
+                            try {
+                              await ref
+                                  .read(radioPlaybackProvider.notifier)
+                                  .toggle(
+                                    streamUrl,
+                                    title:
+                                        currentStation?.name ??
+                                        'Radio Trebujena',
+                                    stationId: currentStation?.id,
+                                  );
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'No se pudo reproducir la emisora',
+                                    ),
+                                    backgroundColor: Colors.redAccent,
+                                  ),
+                                );
+                              }
+                            }
+                          }
+                        : null,
+                  );
+                },
               ),
 
-              const Spacer(),
+              // const Spacer(),
+              const SizedBox(height: 20),
 
               // ─── Control de Volumen ──────────────────────────────────────────
               Container(

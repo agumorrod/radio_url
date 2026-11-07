@@ -1,6 +1,6 @@
 import 'package:go_router/go_router.dart';
-import 'package:radio_app/presentation/screens/main_shell.dart';
-import 'package:radio_app/presentation/screens/settings_screen.dart';
+import 'package:radio_url/presentation/screens/main_shell.dart';
+import 'package:radio_url/presentation/screens/settings_screen.dart';
 
 /// Configuración de rutas - similar a @RequestMapping en Spring Boot
 final appRouter = GoRouter(
