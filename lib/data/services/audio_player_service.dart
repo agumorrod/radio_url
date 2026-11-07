@@ -6,6 +6,8 @@ import 'dart:async';
 enum PlaybackType { none, radio, podcast }
 
 class AudioPlayerService {
+  static const double defaultVolume = 0.7;
+
   static final AudioPlayerService _instance = AudioPlayerService._internal();
   factory AudioPlayerService() => _instance;
 
@@ -19,6 +21,7 @@ class AudioPlayerService {
         ),
       ),
     );
+    _initialVolumeApplied = _player.setVolume(defaultVolume).catchError((_) {});
 
     _playerStateSubscription = _player.playerStateStream.listen((state) {
       _synchronizePlaybackState(state.playing);
@@ -51,6 +54,7 @@ class AudioPlayerService {
   static const _channel = MethodChannel('es.app.radio_url/foreground');
 
   late final AudioPlayer _player;
+  late final Future<void> _initialVolumeApplied;
   late final StreamSubscription<PlayerState> _playerStateSubscription;
   late final StreamSubscription<PlayerException> _playerErrorSubscription;
   PlaybackType _currentType = PlaybackType.none;
@@ -128,6 +132,9 @@ class AudioPlayerService {
     _currentType = PlaybackType.radio;
     _currentPodcastId = null;
     try {
+      await _initialVolumeApplied;
+      if (requestId != _radioRequestId) return;
+
       await _startForeground(title: title, subtitle: 'En directo');
       if (requestId != _radioRequestId) return;
 
@@ -164,6 +171,7 @@ class AudioPlayerService {
     _currentType = PlaybackType.podcast;
     _currentPodcastId = podcastId;
     try {
+      await _initialVolumeApplied;
       await _startForeground(title: title, subtitle: '');
       await _player.stop();
       final duration = await _player.setUrl(url);
@@ -192,8 +200,10 @@ class AudioPlayerService {
 
   Future<void> seek(Duration position) async => await _player.seek(position);
 
-  Future<void> setVolume(double volume) async =>
-      await _player.setVolume(volume.clamp(0.0, 1.0));
+  Future<void> setVolume(double volume) async {
+    await _initialVolumeApplied;
+    await _player.setVolume(volume.clamp(0.0, 1.0));
+  }
 
   double get volume => _player.volume;
 
