@@ -195,6 +195,11 @@ class StationsNotifier extends AsyncNotifier<List<Station>> {
 
   Future<void> remove(String stationId) async {
     final current = state.value ?? [];
+    final currentStationId = await ref.read(currentStationIdProvider.future);
+    if (currentStationId == stationId) {
+      await ref.read(radioPlaybackProvider.notifier).stop();
+      await ref.read(currentStationIdProvider.notifier).clear();
+    }
     await _save(current.where((s) => s.id != stationId).toList());
   }
 
@@ -299,6 +304,11 @@ class CurrentStationIdNotifier extends AsyncNotifier<String?> {
     await ref.read(settingsRepositoryProvider).saveCurrentStationId(stationId);
     state = AsyncData(stationId);
   }
+
+  Future<void> clear() async {
+    state = const AsyncData<String?>(null);
+    await ref.read(settingsRepositoryProvider).clearCurrentStationId();
+  }
 }
 
 final currentStationIdProvider =
@@ -359,6 +369,12 @@ class RadioPlaybackNotifier extends Notifier<bool> {
     }
   }
 
+  Future<void> stop() async {
+    _playRequestId++;
+    await ref.read(audioServiceProvider).stop();
+    state = false;
+  }
+
   /// Reproduce y deja constancia del resultado:
   ///  - Si falla: la emisora pasa a "no disponible" y se anota en el registro.
   ///  - Si funciona: vuelve a estar disponible (aunque estuviera marcada como caída).
@@ -407,7 +423,7 @@ final radioPlaybackProvider = NotifierProvider<RadioPlaybackNotifier, bool>(
 
 class VolumeNotifier extends Notifier<double> {
   @override
-  double build() => 0.7;
+  double build() => AudioPlayerService.defaultVolume;
 
   Future<void> setVolume(double volume) async {
     final audioService = ref.read(audioServiceProvider);

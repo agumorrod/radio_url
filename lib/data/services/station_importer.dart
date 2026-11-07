@@ -53,13 +53,19 @@ class StationImporter {
       String url;
       String category;
 
-      // Una URL puede acabar en ';' (típico de Shoutcast: http://host:8000/;)
-      // por eso solo separamos por ';' si la línea NO empieza por http
+      // En una fila delimitada, el primer ';' separa el nombre y el último
+      // separa la categoría. Los ';' intermedios pertenecen a la URL.
       if (!line.startsWith('http') && line.contains(';')) {
-        final parts = line.split(';').map((p) => p.trim()).toList();
-        name = parts[0];
-        url = parts.length > 1 ? parts[1] : '';
-        category = parts.length > 2 ? parts[2] : '';
+        final firstSeparator = line.indexOf(';');
+        final lastSeparator = line.lastIndexOf(';');
+        name = line.substring(0, firstSeparator).trim();
+        if (lastSeparator > firstSeparator) {
+          url = line.substring(firstSeparator + 1, lastSeparator).trim();
+          category = line.substring(lastSeparator + 1).trim();
+        } else {
+          url = line.substring(firstSeparator + 1).trim();
+          category = '';
+        }
       } else {
         url = line;
         name = pendingName ?? '';
@@ -95,7 +101,8 @@ class StationImporter {
     return ImportResult(stations, issues);
   }
 
-  /// Genera el formato 1 (Nombre;URL;Categoría), compatible con parse()
+  /// Genera el formato 1 (Nombre;URL;Categoría), compatible con parse().
+  /// Los separadores dentro de la URL se conservan entre el primer y último ';'.
   static String toText(List<Station> stations) {
     return stations
         .map((s) => '${_clean(s.name)};${s.url};${_clean(s.category)}')

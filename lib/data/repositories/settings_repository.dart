@@ -61,6 +61,11 @@ class SettingsRepository {
     await prefs.setString(_currentStationKey, stationId);
   }
 
+  Future<void> clearCurrentStationId() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_currentStationKey);
+  }
+
   // ─── Posición del botón "+" ──────────────────────────────────────────────────
 
   /// Se guarda como fracción (0.0 a 1.0) del espacio disponible, no en píxeles,

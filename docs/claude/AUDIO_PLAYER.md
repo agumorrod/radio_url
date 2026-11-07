@@ -13,7 +13,7 @@ El servicio escucha `playerStateStream` y `errorStream` en un único punto de si
 `playRadio(url, title:)`:
 
 1. Marca el tipo actual como `radio` y limpia el ID de podcast.
-2. Solicita iniciar el servicio foreground Android y actualiza el wakelock.
+2. Solicita iniciar el servicio foreground Android; el listener del player sincroniza el wakelock según el estado real.
 3. Detiene la fuente anterior.
 4. Carga la nueva URL con `setUrl`.
 5. Lanza `play()` sin esperarlo, porque un stream en directo no termina mientras está reproduciéndose.
@@ -26,10 +26,10 @@ El provider resuelve previamente M3U/PLS mediante `StreamResolver`, antes de lla
 ## Pausa, reanudación y parada
 
 - `pause()` actualiza el foreground/wakelock y pausa el player.
-- `resume()` reanuda el player; el listener actualiza foreground/wakelock a partir del estado emitido.
+- `resume()` vuelve a cargar la URL de radio activa, igual que el botón de reproducción de la app; para otros tipos lanza `play()` sin esperarlo. El listener sincroniza foreground/wakelock.
 - `stop()` limpia el tipo y el ID de podcast, detiene foreground/wakelock y para el player.
 - `seek()` y `setVolume()` delegan en `just_audio`.
-- El volumen se limita al intervalo 0.0–1.0; el provider observado parte de 0.7.
+- El volumen inicial compartido por el servicio y el provider es 0.7. El servicio lo aplica al crear el player y espera esa operación antes de iniciar audio; los cambios posteriores se limitan al intervalo 0.0–1.0.
 
 ## Buffer
 
