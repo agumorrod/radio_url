@@ -29,4 +29,27 @@ void main() {
     expect(result.stations.single.url, 'https://host/stream');
     expect(result.stations.single.category, 'Sin categoría');
   });
+
+  test('parses M3U attributes containing commas', () {
+    final result = StationImporter.parse(
+      '#EXTM3U\n'
+      '#EXTINF:-1 group-title="Pop, Rock",Nombre de la emisora\n'
+      'https://host/stream',
+    );
+
+    expect(result.issues, isEmpty);
+    expect(result.stations, hasLength(1));
+    expect(result.stations.single.name, 'Nombre de la emisora');
+    expect(result.stations.single.category, 'Pop, Rock');
+  });
+
+  test('parses a delimited row whose name starts with http', () {
+    final result = StationImporter.parse('httpradio;http://host/stream;Pop');
+
+    expect(result.issues, isEmpty);
+    expect(result.stations, hasLength(1));
+    expect(result.stations.single.name, 'httpradio');
+    expect(result.stations.single.url, 'http://host/stream');
+    expect(result.stations.single.category, 'Pop');
+  });
 }

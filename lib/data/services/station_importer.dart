@@ -40,7 +40,7 @@ class StationImporter {
 
       // Cabecera M3U: guardamos nombre y categoría para la URL de la línea siguiente
       if (line.startsWith('#EXTINF')) {
-        final comma = line.indexOf(',');
+        final comma = _findCommaOutsideQuotes(line);
         pendingName = comma >= 0 ? line.substring(comma + 1).trim() : null;
         pendingCategory = RegExp(
           r'group-title="([^"]*)"',
@@ -55,7 +55,7 @@ class StationImporter {
 
       // En una fila delimitada, el primer ';' separa el nombre y el último
       // separa la categoría. Los ';' intermedios pertenecen a la URL.
-      if (!line.startsWith('http') && line.contains(';')) {
+      if (!_isHttpUrl(line) && line.contains(';')) {
         final firstSeparator = line.indexOf(';');
         final lastSeparator = line.lastIndexOf(';');
         name = line.substring(0, firstSeparator).trim();
@@ -111,4 +111,19 @@ class StationImporter {
 
   // El ';' es el separador, así que lo sustituimos si aparece en un nombre
   static String _clean(String value) => value.replaceAll(';', ',');
+
+  static bool _isHttpUrl(String value) =>
+      value.startsWith('http://') || value.startsWith('https://');
+
+  static int _findCommaOutsideQuotes(String value) {
+    var insideQuotes = false;
+    for (var i = 0; i < value.length; i++) {
+      if (value[i] == '"') {
+        insideQuotes = !insideQuotes;
+      } else if (value[i] == ',' && !insideQuotes) {
+        return i;
+      }
+    }
+    return -1;
+  }
 }
