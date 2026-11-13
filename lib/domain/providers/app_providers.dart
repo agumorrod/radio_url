@@ -238,38 +238,60 @@ class StationHealthNotifier extends Notifier<bool> {
     // En web no es fiable (CORS) y solo se hace una vez por ejecución
     if (_started || kIsWeb) return;
     _started = true;
+    var completed = false;
 
-    // Unos segundos de cortesía para no competir con el arranque de la app
-    await Future<void>.delayed(const Duration(seconds: 4));
+    try {
+      // Unos segundos de cortesía para no competir con el arranque de la app
+      await Future<void>.delayed(const Duration(seconds: 4));
 
-    final stations = await ref.read(stationsProvider.future);
-    if (stations.isEmpty) return;
+      final stations = await ref.read(stationsProvider.future);
+      if (stations.isEmpty) {
+        completed = true;
+        return;
+      }
 
-    final checker = ref.read(stationCheckerProvider);
-    final log = ref.read(errorLogProvider.notifier);
-    final unavailable = ref.read(unavailableStationsProvider.notifier);
+      final checker = ref.read(stationCheckerProvider);
+      final log = ref.read(errorLogProvider.notifier);
+      final unavailable = ref.read(unavailableStationsProvider.notifier);
 
-    // Sin internet todas fallarían: lo anotamos una sola vez y no marcamos nada
-    if (!await checker.hasInternet()) {
-      log.addError(
-        'Sin conexión a internet: no se pudieron comprobar las emisoras al arrancar',
+      // Sin internet todas fallarían: lo anotamos una sola vez y no marcamos nada
+      if (!await checker.hasInternet()) {
+        log.addError(
+          'Sin conexión a internet: no se pudieron comprobar las emisoras al arrancar',
+        );
+        completed = true;
+        return;
+      }
+
+      state = true;
+      await checker.checkAll(
+        stations,
+        onResult: (station, failure) {
+          if (failure == null) {
+            unavailable.markAvailable(station.id);
+          } else {
+            unavailable.markUnavailable(station.id);
+            log.addError('Emisora no disponible: "${station.name}" ($failure)');
+          }
+        },
       );
-      return;
+      completed = true;
+    } catch (error) {
+      // Una comprobación fallida no debe quedar como tarea sin gestionar ni
+      // impedir que se pueda volver a intentar.
+      try {
+        ref
+            .read(errorLogProvider.notifier)
+            .addError(
+              'No se pudo completar la comprobación de emisoras: $error',
+            );
+      } catch (_) {
+        // El provider puede estar cerrándose; el estado se limpia igualmente.
+      }
+    } finally {
+      state = false;
+      _started = completed;
     }
-
-    state = true;
-    await checker.checkAll(
-      stations,
-      onResult: (station, failure) {
-        if (failure == null) {
-          unavailable.markAvailable(station.id);
-        } else {
-          unavailable.markUnavailable(station.id);
-          log.addError('Emisora no disponible: "${station.name}" ($failure)');
-        }
-      },
-    );
-    state = false;
   }
 }
 
