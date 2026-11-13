@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -99,7 +100,10 @@ class _RadiosScreenState extends ConsumerState<RadiosScreen> {
 
     // Comprobación de emisoras en segundo plano, una vez al arrancar la app
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(stationHealthProvider.notifier).startBackgroundCheck();
+      if (!mounted) return;
+      unawaited(
+        ref.read(stationHealthProvider.notifier).startBackgroundCheck(),
+      );
     });
   }
 
